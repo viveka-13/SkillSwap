@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hyperlocal Skill Swap</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #b8860b;
+      --primary-light: #daa520;
+      --primary-hover: #996515;
+      --success: #2e7d32;
+      --success-light: #a5d6a7;
+      --warning: #f59e0b;
+      --danger: #c62828;
+      --bg: #fdf6e3;
+      --bg-cream: #fffdf7;
+      --card-bg: rgba(255, 253, 247, 0.9);
+      --sidebar-bg: rgba(253, 246, 227, 0.85);
+      --text: #3e2723;
+      --text-muted: #8d6e63;
+      --border: #e8d5b7;
+      --yellow-soft: #fff8dc;
+      --yellow-glow: rgba(218, 165, 32, 0.15);
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #fdf6e3 0%, #fff8dc 50%, #faebd7 100%); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+    
+    .hidden { display: none !important; }
+    
+    /* ========== AUTH ========== */
+    .auth-view { position: fixed; inset: 0; z-index: 50; display: flex; }
+    .auth-left { 
+      flex: 1; 
+      background: linear-gradient(135deg, #b8860b 0%, #daa520 50%, #f0c040 100%); 
+      display: flex; flex-direction: column; justify-content: center; align-items: center; 
+      color: white; padding: 3rem; text-align: center; position: relative; overflow: hidden;
+    }
+    .auth-left::before { content: ''; position: absolute; width: 300px; height: 300px; background: rgba(255,255,255,0.08); border-radius: 50%; top: -80px; left: -80px; animation: float 6s ease-in-out infinite; }
+    .auth-left::after { content: ''; position: absolute; width: 200px; height: 200px; background: rgba(255,255,255,0.06); border-radius: 50%; bottom: -40px; right: -40px; animation: float 8s ease-in-out infinite reverse; }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+    .auth-left h1 { font-size: 3rem; font-weight: 700; margin-bottom: 1rem; text-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+    .auth-left .feature-list { text-align: left; margin-top: 2rem; }
+    .auth-left .feature-list div { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; font-size: 1.05rem; opacity: 0.95; }
+    
+    .auth-right { flex: 1; display: flex; align-items: center; justify-content: center; background: var(--bg-cream); }
+    .auth-box { 
+      background: white; padding: 3rem; border-radius: 24px; 
+      box-shadow: 0 25px 50px -12px rgba(184, 134, 11, 0.15); 
+      width: 100%; max-width: 440px; border: 1px solid var(--border);
+    }
+    
+    /* Tabs */
+    .auth-tabs { display: flex; margin-bottom: 24px; background: var(--yellow-soft); border-radius: 12px; padding: 4px; }
+    .auth-tab { flex:1; text-align:center; padding: 10px; border-radius: 10px; cursor: pointer; font-weight: 600; color: var(--text-muted); transition: all 0.3s; }
+    .auth-tab.active { background: white; color: var(--primary); box-shadow: 0 2px 8px rgba(184, 134, 11, 0.15); }
+    
+    /* Forms */
+    input, textarea { width: 100%; padding: 12px 16px; margin-bottom: 14px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-cream); font-family: 'Inter', sans-serif; outline: none; transition: all 0.25s; color: var(--text); }
+    input:focus, textarea:focus { border-color: var(--primary); background: white; box-shadow: 0 0 0 4px var(--yellow-glow); }
+    input::placeholder { color: #bcaaa4; }
+    button { width: 100%; padding: 12px 20px; border-radius: 10px; border: none; background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; font-weight: 600; cursor: pointer; transition: all 0.3s; font-family: 'Inter', sans-serif; font-size: 0.95rem; }
+    button:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(184, 134, 11, 0.3); }
+    button:active { transform: translateY(0); }
+    button:disabled { background: #bcaaa4; cursor: not-allowed; transform: none; box-shadow: none; }
+    
+    /* ========== APP LAYOUT ========== */
+    .app-container { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+    
+    /* Sidebar */
+    .sidebar { 
+      width: 260px; background: var(--sidebar-bg); backdrop-filter: blur(20px); 
+      border-right: 1px solid var(--border); padding: 2rem 1rem; display: flex; flex-direction: column;
+    }
+    .sidebar-brand { font-weight: 700; font-size: 1.4rem; color: var(--primary); margin-bottom: 2rem; display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+    .nav-item { 
+      padding: 12px 16px; margin-bottom: 6px; border-radius: 10px; cursor: pointer; 
+      font-weight: 500; color: var(--text-muted); transition: all 0.25s; display: flex; align-items: center; gap: 10px;
+    }
+    .nav-item:hover { background: var(--yellow-soft); color: var(--primary); transform: translateX(4px); }
+    .nav-item.active { background: white; color: var(--primary); box-shadow: 0 4px 12px rgba(184, 134, 11, 0.1); }
+    .nav-bottom { margin-top: auto; }
+    
+    /* Main */
+    .main-content { flex: 1; padding: 2rem 3rem; overflow-y: auto; background: var(--bg); }
+    
+    /* Cards */
+    .card { 
+      background: var(--card-bg); backdrop-filter: blur(12px); border: 1px solid var(--border); 
+      padding: 1.5rem; border-radius: 16px; box-shadow: 0 4px 12px rgba(184, 134, 11, 0.06); 
+      margin-bottom: 1.5rem; transition: all 0.3s;
+    }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 12px 24px rgba(184, 134, 11, 0.12); }
+    .section-title { font-size: 1.15rem; font-weight: 600; margin-bottom: 1rem; color: var(--text); }
+    
+    /* Stats Cards */
+    .stat-card { text-align: center; }
+    .stat-card .stat-value { font-size: 2.5rem; font-weight: 700; margin: 8px 0; }
+    .stat-card .stat-label { font-size: 0.85rem; color: var(--text-muted); }
+    
+    /* Match Cards */
+    .match-score { font-size: 1.6rem; color: var(--success); font-weight: 700; }
+    .ai-reasoning { background: var(--yellow-glow); border-left: 4px solid var(--primary); padding: 12px 16px; border-radius: 0 10px 10px 0; margin-top: 12px; font-style: italic; color: var(--primary-hover); font-size: 0.92rem; }
+    .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+    .badge-success { background: #e8f5e9; color: #2e7d32; }
+    
+    /* Pending Card */
+    .pending-card { background: #fff8e1; border: 1px solid #ffe082; }
+    
+    /* ========== CHAT ========== */
+    .chat-layout { display: flex; height: calc(100vh - 4rem); background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(184,134,11,0.06); border: 1px solid var(--border); }
+    .chat-sidebar { width: 300px; border-right: 1px solid var(--border); background: var(--bg-cream); display: flex; flex-direction: column; }
+    .chat-sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 1.1rem; color: var(--primary); }
+    .chat-room-item { padding: 16px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: all 0.2s; }
+    .chat-room-item:hover { background: var(--yellow-soft); transform: translateX(4px); }
+    .chat-room-item.active { background: white; border-left: 4px solid var(--primary); }
+    .chat-room-item .room-name { font-weight: 600; color: var(--text); }
+    .chat-room-item .room-score { font-size: 0.8rem; color: var(--success); margin-top: 2px; }
+    
+    .chat-main { flex: 1; display: flex; flex-direction: column; background: var(--bg-cream); }
+    .chat-header { padding: 16px 24px; border-bottom: 1px solid var(--border); font-weight: 600; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 12px; }
+    .chat-messages { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    
+    .message { max-width: 70%; padding: 12px 16px; border-radius: 16px; font-size: 0.93rem; line-height: 1.5; animation: msgIn 0.3s ease; }
+    @keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .message.sent { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+    .message.received { background: white; color: var(--text); border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 4px; }
+    
+    /* File message */
+    .file-bubble { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 14px; max-width: 320px; cursor: pointer; transition: all 0.2s; text-decoration: none; }
+    .file-bubble:hover { transform: scale(1.02); }
+    .file-bubble.sent { background: rgba(255,255,255,0.15); align-self: flex-end; color: white; }
+    .file-bubble.received { background: var(--yellow-soft); border: 1px solid var(--border); align-self: flex-start; color: var(--text); }
+    .file-icon { font-size: 2rem; flex-shrink: 0; }
+    .file-info .file-name { font-weight: 600; font-size: 0.9rem; word-break: break-all; }
+    .file-info .file-size { font-size: 0.75rem; opacity: 0.7; margin-top: 2px; }
+    
+    /* Chat Input */
+    .chat-input-area { padding: 16px 24px; background: white; border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
+    .chat-input-area input { margin-bottom: 0; border-radius: 24px; padding: 12px 20px; flex: 1; }
+    .chat-input-area button { width: auto; border-radius: 24px; padding: 12px 24px; }
+    
+    /* Plus button for file upload */
+    .btn-attach { 
+      width: 44px; height: 44px; border-radius: 50%; padding: 0; 
+      background: var(--yellow-soft); color: var(--primary); 
+      font-size: 1.5rem; display: flex; align-items: center; justify-content: center;
+      border: 2px solid var(--border); transition: all 0.3s; flex-shrink: 0;
+    }
+    .btn-attach:hover { background: var(--primary); color: white; transform: rotate(90deg) scale(1.1); box-shadow: 0 6px 16px rgba(184,134,11,0.3); }
+    
+    /* Empty Chat State */
+    .chat-empty { flex:1; display:flex; align-items:center; justify-content:center; flex-direction:column; color:var(--text-muted); }
+    .chat-empty .empty-icon { font-size: 4rem; margin-bottom: 16px; animation: float 4s ease-in-out infinite; }
+    
+    /* Toast */
+    .toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: white; padding: 14px 24px; border-radius: 14px; font-weight: 500; z-index: 9999; box-shadow: 0 10px 25px rgba(0,0,0,0.15); animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1), fadeOut 0.3s ease 2.7s forwards; }
+    @keyframes slideUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes fadeOut { to { opacity: 0; } }
+    
+    /* Flex Utilities */
+    .flex { display: flex; } .items-center { align-items: center; } .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 0.5rem; } .gap-4 { gap: 1rem; }
+    
+    /* Upload overlay */
+    .upload-progress { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; display: flex; align-items: center; justify-content: center; }
+    .upload-card { background: white; padding: 2rem; border-radius: 16px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.2); }
+    .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 16px auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- AUTH VIEW -->
+  <div id="authView" class="auth-view">
+    <div class="auth-left">
+      <h1>🤝 SkillSwap</h1>
+      <p style="font-size: 1.15rem; opacity: 0.9; max-width: 420px; line-height: 1.7;">Exchange your valuable skills with people nearby — no money needed, just community trust.</p>
+      <div class="feature-list">
+        <div>🧠 AI-powered semantic matchmaking</div>
+        <div>📍 Hyperlocal distance-based discovery</div>
+        <div>💬 Secure chat with file sharing</div>
+        <div>🪙 Credit-based trust economy</div>
+      </div>
+    </div>
+    <div class="auth-right">
+      <div class="auth-box">
+        <div class="auth-tabs">
+          <div id="tabLogin" class="auth-tab active" onclick="toggleAuth('login')">Sign In</div>
+          <div id="tabReg" class="auth-tab" onclick="toggleAuth('reg')">Create Account</div>
+        </div>
+
+        <div id="formLogin">
+          <input type="email" id="loginEmail" placeholder="Email address" value="alice@example.com">
+          <input type="password" id="loginPwd" placeholder="Password" value="password123">
+          <button onclick="login()">Sign In</button>
+        </div>
+
+        <div id="formReg" class="hidden">
+          <input type="text" id="regName" placeholder="Full Name">
+          <input type="email" id="regEmail" placeholder="Email address">
+          <input type="password" id="regPwd" placeholder="Create password">
+          <input type="text" id="regCity" placeholder="Your City (e.g. Hyderabad)">
+          <div class="flex gap-4">
+            <input type="number" id="regLat" placeholder="Latitude" step="any">
+            <input type="number" id="regLon" placeholder="Longitude" step="any">
+          </div>
+          <input type="text" id="regOffered" placeholder="Skills you Offer (comma separated)">
+          <input type="text" id="regNeeded" placeholder="Skills you Need (comma separated)">
+          <button onclick="register()">Create Account & Embed Skills</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- APP LAYOUT -->
+  <div id="appLayout" class="app-container hidden">
+    <div class="sidebar">
+      <div class="sidebar-brand">🤝 SkillSwap</div>
+      <div class="nav-item active" onclick="switchTab('dashboard', this)">📊 Dashboard</div>
+      <div class="nav-item" onclick="switchTab('match', this)">🔍 AI Matchmaking</div>
+      <div class="nav-item" onclick="switchTab('chat', this)">💬 Messages</div>
+      <div class="nav-bottom">
+        <div class="nav-item" style="color: var(--danger);" onclick="logout()">🚪 Logout</div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      
+      <!-- DASHBOARD -->
+      <div id="tab-dashboard" class="tab-content">
+        <h1 style="margin-bottom: 24px;" id="dashWelcome">Welcome back!</h1>
+        <div class="flex gap-4">
+          <div class="card stat-card" style="flex: 1;">
+            <p class="section-title">⭐ Trust Score</p>
+            <div class="stat-value" id="dashTrust" style="color: var(--primary);">0</div>
+            <div class="stat-label">Out of 5</div>
+          </div>
+          <div class="card stat-card" style="flex: 1;">
+            <p class="section-title">🪙 Wallet</p>
+            <div class="stat-value" id="dashWallet" style="color: var(--success);">0</div>
+            <div class="stat-label">Credits available</div>
+          </div>
+        </div>
+        <div class="card">
+          <p class="section-title">Your Skills Profile</p>
+          <p style="margin-bottom:8px;"><strong>I Offer:</strong> <span id="dashOffered" style="color:var(--text-muted);"></span></p>
+          <p><strong>I Need:</strong> <span id="dashNeeded" style="color:var(--text-muted);"></span></p>
+        </div>
+        <div class="card pending-card">
+          <p class="section-title">📨 Incoming Requests</p>
+          <div id="pendingContainer"><p style="color:var(--text-muted);">No pending requests.</p></div>
+        </div>
+      </div>
+
+      <!-- MATCHMAKING -->
+      <div id="tab-match" class="tab-content hidden">
+        <h1 style="margin-bottom: 8px;">AI Matchmaking</h1>
+        <p style="color: var(--text-muted); margin-bottom: 24px;">Discover members nearby whose skills semantically match your needs.</p>
+        <div class="card">
+          <div class="flex gap-4">
+            <div style="flex:1;">
+              <label style="font-size:0.85rem; font-weight:600; margin-bottom:6px; display:block; color:var(--text-muted);">I NEED HELP WITH</label>
+              <input type="text" id="searchNeeded" placeholder="e.g. Web Design">
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:0.85rem; font-weight:600; margin-bottom:6px; display:block; color:var(--text-muted);">I CAN OFFER</label>
+              <input type="text" id="searchOffered" placeholder="e.g. Cooking">
+            </div>
+          </div>
+          <button onclick="findMatches()" id="matchBtn" style="width:auto; margin-top:8px;">🧠 Search the Network</button>
+        </div>
+        <div id="matchesContainer"></div>
+      </div>
+
+      <!-- CHAT -->
+      <div id="tab-chat" class="tab-content hidden">
+        <div class="chat-layout">
+          <div class="chat-sidebar">
+            <div class="chat-sidebar-header">Active Exchanges</div>
+            <div id="roomsContainer" style="overflow-y: auto; flex:1;">
+              <div style="padding: 24px; color: var(--text-muted); text-align: center; font-size:0.9rem;">No active chats yet.</div>
+            </div>
+          </div>
+          <div class="chat-main" id="chatArea" style="display:none;">
+            <div class="chat-header">
+              <span style="font-size:1.3rem;">💬</span> Chat with <span id="chatPartnerName" style="color: var(--primary);">User</span>
+            </div>
+            <div class="chat-messages" id="messagesContainer"></div>
+            <div class="chat-input-area">
+              <button class="btn-attach" onclick="document.getElementById('fileInput').click()" title="Share files (PDF, DOCX, Images)">+</button>
+              <input type="file" id="fileInput" style="display:none;" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.txt,.pptx,.xlsx" onchange="uploadFile(this)">
+              <input type="text" id="chatInput" placeholder="Type a message..." onkeypress="if(event.key === 'Enter') sendMessage()">
+              <button onclick="sendMessage()">Send</button>
+            </div>
+          </div>
+          <div id="chatEmptyState" class="chat-empty">
+            <div class="empty-icon">💬</div>
+            <h3>Select a conversation</h3>
+            <p style="margin-top:8px;">Choose an active exchange to start chatting & sharing files.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Upload Progress Overlay -->
+  <div id="uploadOverlay" class="upload-progress hidden">
+    <div class="upload-card">
+      <div class="spinner"></div>
+      <p style="font-weight:600;">Uploading file...</p>
+    </div>
+  </div>
+
+<script>
+  let token = localStorage.getItem('token');
+  let currentUserId = null;
+  let activeMatchId = null;
+  let chatPollInterval = null;
+
+  if (token) {
+    document.getElementById('authView').classList.add('hidden');
+    document.getElementById('appLayout').classList.remove('hidden');
+    loadDashboard();
+  }
+
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerText = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  function toggleAuth(type) {
+    document.getElementById('formLogin').classList.toggle('hidden', type !== 'login');
+    document.getElementById('formReg').classList.toggle('hidden', type !== 'reg');
+    document.getElementById('tabLogin').classList.toggle('active', type === 'login');
+    document.getElementById('tabReg').classList.toggle('active', type === 'reg');
+  }
+
+  function switchTab(tabId, el) {
+    document.querySelectorAll('.sidebar .nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+    document.getElementById('tab-' + tabId).classList.remove('hidden');
+    if (tabId === 'chat') loadChatRooms();
+    else clearInterval(chatPollInterval);
+  }
+
+  function logout() { localStorage.removeItem('token'); location.reload(); }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+  }
+
+  function getFileIcon(ext) {
+    const icons = { '.pdf': '📄', '.doc': '📝', '.docx': '📝', '.jpg': '🖼️', '.jpeg': '🖼️', '.png': '🖼️', '.gif': '🖼️', '.txt': '📃', '.pptx': '📊', '.xlsx': '📈' };
+    return icons[ext] || '📎';
+  }
+
+  // ========== AUTH ==========
+  async function register() {
+    const data = {
+      name: document.getElementById('regName').value,
+      email: document.getElementById('regEmail').value,
+      password: document.getElementById('regPwd').value,
+      city: document.getElementById('regCity').value,
+      lat: parseFloat(document.getElementById('regLat').value || 0),
+      lon: parseFloat(document.getElementById('regLon').value || 0),
+      bio: "Ready to swap skills.",
+      skills_offered: document.getElementById('regOffered').value.split(',').map(s=>s.trim()),
+      skills_needed: document.getElementById('regNeeded').value.split(',').map(s=>s.trim())
+    };
+    const res = await fetch('/api/auth/register', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+    if (res.ok) { toast("✅ Account created! Please sign in."); toggleAuth('login'); }
+    else { const err = await res.json(); alert("Registration failed: " + err.detail); }
+  }
+
+  async function login() {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ email: document.getElementById('loginEmail').value, password: document.getElementById('loginPwd').value })
+    });
+    if (res.ok) { const json = await res.json(); localStorage.setItem('token', json.token); location.reload(); }
+    else alert("Login failed.");
+  }
+
+  // ========== DASHBOARD ==========
+  async function loadDashboard() {
+    const res = await fetch('/api/dashboard', { headers: {'Authorization': 'Bearer ' + token} });
+    if (!res.ok) return logout();
+    const data = await res.json();
+    currentUserId = data.user.id;
+    document.getElementById('dashWelcome').innerText = `Welcome back, ${data.user.name}!`;
+    document.getElementById('dashTrust').innerText = data.user.trust_score || 0;
+    document.getElementById('dashWallet').innerText = data.user.wallet_balance || 0;
+    document.getElementById('dashOffered').innerText = data.skills_offered.join(', ');
+    document.getElementById('dashNeeded').innerText = data.skills_needed.join(', ');
+    document.getElementById('searchNeeded').value = data.skills_needed[0] || '';
+    document.getElementById('searchOffered').value = data.skills_offered[0] || '';
+    loadPendingRequests();
+  }
+
+  async function loadPendingRequests() {
+    const res = await fetch('/api/exchange/pending', { headers: {'Authorization': 'Bearer ' + token} });
+    if (!res.ok) return;
+    const data = await res.json();
+    const c = document.getElementById('pendingContainer');
+    if (data.pending.length === 0) { c.innerHTML = '<p style="color:var(--text-muted);">No pending requests.</p>'; return; }
+    c.innerHTML = data.pending.map(p => `
+      <div class="card" style="background:#fff8e1; border:1px solid #ffe082; margin-bottom:12px;">
+        <div class="flex justify-between items-center">
+          <div><strong>${p.requester_name}</strong> wants to exchange! <span class="badge badge-success">${p.compatibility_score}%</span></div>
+          <button onclick="acceptExchange('${p.id}', this)" style="width:auto; padding:8px 16px;">Accept & Connect</button>
+        </div>
+        <div class="ai-reasoning">🤖 ${p.ai_reasoning}</div>
+      </div>
+    `).join('');
+  }
+
+  async function acceptExchange(matchId, btn) {
+    btn.disabled = true; btn.innerText = "Accepting...";
+    const res = await fetch(`/api/exchange/accept/${matchId}`, { method: 'POST', headers: {'Authorization': 'Bearer ' + token} });
+    if (res.ok) { toast("✅ Accepted! Chat room unlocked."); loadDashboard(); }
+    else { btn.disabled = false; btn.innerText = "Accept & Connect"; }
+  }
+
+  // ========== MATCHMAKING ==========
+  async function findMatches() {
+    const btn = document.getElementById('matchBtn');
+    btn.disabled = true; btn.innerText = "AI is scanning local vectors...";
+    const c = document.getElementById('matchesContainer'); c.innerHTML = "";
+    const res = await fetch('/api/matches', {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+      body: JSON.stringify({ needed_skill: document.getElementById('searchNeeded').value, offered_skill: document.getElementById('searchOffered').value })
+    });
+    btn.disabled = false; btn.innerText = "🧠 Search the Network";
+    if (res.ok) {
+      const json = await res.json();
+      if (json.matches.length === 0) { c.innerHTML = "<p style='color:var(--text-muted);'>No matches found. Try another skill.</p>"; return; }
+      json.matches.forEach(m => {
+        const div = document.createElement('div'); div.className = "card";
+        const sr = (m.ai_reasoning||'').replace(/'/g,"\\'").replace(/"/g,"&quot;");
+        div.innerHTML = `
+          <div class="flex justify-between items-center" style="margin-bottom:12px;">
+            <div>
+              <h3 style="margin:0; font-size:1.2rem;">${m.name} <span style="font-size:0.85rem; color:var(--text-muted); font-weight:400;">(${m.city})</span></h3>
+              <p style="margin:4px 0 0; font-size:0.88rem; color:var(--text-muted);">📍 ${m.distance.toFixed(1)} km &nbsp;|&nbsp; ⭐ Trust: ${m.trust_score}/5</p>
+            </div>
+            <div class="match-score">${m.compatibility_score}%</div>
+          </div>
+          <div class="ai-reasoning">🤖 ${m.ai_reasoning}</div>
+          <div style="text-align:right; margin-top:16px;">
+            <button onclick="sendRequest('${m.id}',${m.compatibility_score},'${sr}',this)" style="width:auto;">💬 Request Exchange</button>
+          </div>`;
+        c.appendChild(div);
+      });
+    }
+  }
+
+  async function sendRequest(uid, score, reasoning, btn) {
+    btn.disabled = true; btn.innerText = "Sending...";
+    const res = await fetch('/api/exchange/request', {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+      body: JSON.stringify({ matched_user_id: uid, compatibility_score: score, ai_reasoning: reasoning })
+    });
+    if (res.ok) { btn.innerText = "✅ Sent!"; btn.style.background = "var(--success)"; toast("Request sent!"); }
+    else { btn.disabled = false; btn.innerText = "💬 Request Exchange"; }
+  }
+
+  // ========== CHAT ==========
+  async function loadChatRooms() {
+    const res = await fetch('/api/chat/rooms', { headers: {'Authorization': 'Bearer ' + token} });
+    if (!res.ok) return;
+    const data = await res.json();
+    const c = document.getElementById('roomsContainer');
+    if (data.rooms.length === 0) { c.innerHTML = '<div style="padding:24px; color:var(--text-muted); text-align:center; font-size:0.9rem;">No active chats yet. Accept a match first!</div>'; return; }
+    c.innerHTML = data.rooms.map(r => `
+      <div class="chat-room-item ${r.match_id === activeMatchId ? 'active' : ''}" onclick="openChat('${r.match_id}', '${r.other_user_name}')">
+        <div class="room-name">${r.other_user_name}</div>
+        <div class="room-score">${r.compatibility_score}% Match</div>
+      </div>
+    `).join('');
+  }
+
+  async function openChat(matchId, name) {
+    activeMatchId = matchId;
+    document.getElementById('chatEmptyState').style.display = 'none';
+    document.getElementById('chatArea').style.display = 'flex';
+    document.getElementById('chatPartnerName').innerText = name;
+    loadChatRooms();
+    fetchMessages();
+    clearInterval(chatPollInterval);
+    chatPollInterval = setInterval(fetchMessages, 3000);
+  }
+
+  async function fetchMessages() {
+    if (!activeMatchId) return;
+    const res = await fetch(`/api/chat/${activeMatchId}/messages`, { headers: {'Authorization': 'Bearer ' + token} });
+    if (!res.ok) return;
+    const data = await res.json();
+    const c = document.getElementById('messagesContainer');
+    const atBottom = c.scrollHeight - c.scrollTop <= c.clientHeight + 50;
+
+    if (data.messages.length === 0) {
+      c.innerHTML = '<div style="text-align:center; color:var(--text-muted); margin:auto;">Start chatting & sharing files to exchange knowledge! 📚</div>';
+    } else {
+      c.innerHTML = data.messages.map(m => {
+        const isMine = m.sender_id === currentUserId;
+        const cls = isMine ? 'sent' : 'received';
+        // Check if it's a file message
+        try {
+          const meta = JSON.parse(m.content);
+          if (meta.type === 'file') {
+            const icon = getFileIcon(meta.ext);
+            const isImg = ['.jpg','.jpeg','.png','.gif'].includes(meta.ext);
+            let preview = '';
+            if (isImg) {
+              preview = `<img src="/api/files/${meta.stored_as}" style="max-width:240px; border-radius:10px; margin-top:8px; display:block;" alt="${meta.filename}">`;
+            }
+            return `
+              <a href="/api/files/${meta.stored_as}" target="_blank" download="${meta.filename}" class="file-bubble ${cls}" style="text-decoration:none;">
+                <div class="file-icon">${icon}</div>
+                <div class="file-info">
+                  <div class="file-name">${meta.filename}</div>
+                  <div class="file-size">${formatFileSize(meta.size)}</div>
+                </div>
+              </a>
+              ${isImg ? `<div style="align-self:${isMine?'flex-end':'flex-start'};">${preview}</div>` : ''}
+            `;
+          }
+        } catch(e) {}
+        return `<div class="message ${cls}">${m.content}</div>`;
+      }).join('');
+    }
+    if (atBottom) c.scrollTop = c.scrollHeight;
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const content = input.value.trim();
+    if (!content || !activeMatchId) return;
+    input.value = '';
+    await fetch(`/api/chat/${activeMatchId}/send`, {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+      body: JSON.stringify({ content })
+    });
+    fetchMessages();
+  }
+
+  async function uploadFile(inputEl) {
+    if (!inputEl.files.length || !activeMatchId) return;
+    const file = inputEl.files[0];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) { alert("File too large. Max 10MB."); inputEl.value = ''; return; }
+
+    document.getElementById('uploadOverlay').classList.remove('hidden');
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const base64Data = e.target.result.split(',')[1];
+        
+        const res = await fetch(`/api/chat/${activeMatchId}/upload`, {
+          method: 'POST', 
+          headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+          body: JSON.stringify({ filename: file.name, data: base64Data })
+        });
+        
+        if (res.ok) { toast("📎 File shared!"); fetchMessages(); }
+        else { const err = await res.json(); alert("Upload failed: " + err.detail); }
+        
+        document.getElementById('uploadOverlay').classList.add('hidden');
+        inputEl.value = '';
+      };
+      reader.readAsDataURL(file);
+    } catch(e) { 
+      alert("Upload error."); 
+      document.getElementById('uploadOverlay').classList.add('hidden');
+      inputEl.value = '';
+    }
+  }
+</script>
+</body>
+</html>

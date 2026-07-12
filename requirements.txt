@@ -1,0 +1,14 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+langchain>=0.2.0
+langchain-groq>=0.1.0
+langchain-community>=0.2.0
+langgraph>=0.1.0
+chromadb>=0.5.0
+ddgs
+python-dotenv>=1.0.0
+pydantic>=2.7.0
+aiofiles>=23.0.0
+python-pptx>=0.6.23
+PyJWT>=2.8.0
+passlib[bcrypt]>=1.7.4
