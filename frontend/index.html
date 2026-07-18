@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hyperlocal Skill Swap</title>
+  <title>SkillSwap — Hyperlocal Skill Exchange</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -58,9 +58,10 @@
     .auth-tab.active { background: white; color: var(--primary); box-shadow: 0 2px 8px rgba(184, 134, 11, 0.15); }
     
     /* Forms */
-    input, textarea { width: 100%; padding: 12px 16px; margin-bottom: 14px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-cream); font-family: 'Inter', sans-serif; outline: none; transition: all 0.25s; color: var(--text); }
-    input:focus, textarea:focus { border-color: var(--primary); background: white; box-shadow: 0 0 0 4px var(--yellow-glow); }
+    input, textarea, select { width: 100%; padding: 12px 16px; margin-bottom: 14px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-cream); font-family: 'Inter', sans-serif; outline: none; transition: all 0.25s; color: var(--text); }
+    input:focus, textarea:focus, select:focus { border-color: var(--primary); background: white; box-shadow: 0 0 0 4px var(--yellow-glow); }
     input::placeholder { color: #bcaaa4; }
+    select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238d6e63' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; }
     button { width: 100%; padding: 12px 20px; border-radius: 10px; border: none; background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; font-weight: 600; cursor: pointer; transition: all 0.3s; font-family: 'Inter', sans-serif; font-size: 0.95rem; }
     button:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(184, 134, 11, 0.3); }
     button:active { transform: translateY(0); }
@@ -121,35 +122,85 @@
     
     .chat-main { flex: 1; display: flex; flex-direction: column; background: var(--bg-cream); }
     .chat-header { padding: 16px 24px; border-bottom: 1px solid var(--border); font-weight: 600; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 12px; }
-    .chat-messages { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .chat-messages { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23daa520' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
     
-    .message { max-width: 70%; padding: 12px 16px; border-radius: 16px; font-size: 0.93rem; line-height: 1.5; animation: msgIn 0.3s ease; }
+    /* Message Bubbles — WhatsApp Style */
+    .msg-wrapper { display: flex; flex-direction: column; max-width: 75%; animation: msgIn 0.3s ease; }
+    .msg-wrapper.sent { align-self: flex-end; align-items: flex-end; }
+    .msg-wrapper.received { align-self: flex-start; align-items: flex-start; }
     @keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    .message.sent { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
-    .message.received { background: white; color: var(--text); border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 4px; }
+    
+    .message { padding: 10px 14px; border-radius: 16px; font-size: 0.93rem; line-height: 1.5; position: relative; }
+    .message.sent { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; border-bottom-right-radius: 4px; }
+    .message.received { background: white; color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .msg-time { font-size: 0.7rem; color: var(--text-muted); margin-top: 3px; padding: 0 4px; }
+    .msg-wrapper.sent .msg-time { color: rgba(255,255,255,0.6); text-align: right; }
     
     /* File message */
     .file-bubble { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 14px; max-width: 320px; cursor: pointer; transition: all 0.2s; text-decoration: none; }
     .file-bubble:hover { transform: scale(1.02); }
-    .file-bubble.sent { background: rgba(255,255,255,0.15); align-self: flex-end; color: white; }
-    .file-bubble.received { background: var(--yellow-soft); border: 1px solid var(--border); align-self: flex-start; color: var(--text); }
+    .file-bubble.sent { background: rgba(255,255,255,0.15); color: white; }
+    .file-bubble.received { background: var(--yellow-soft); border: 1px solid var(--border); color: var(--text); }
     .file-icon { font-size: 2rem; flex-shrink: 0; }
     .file-info .file-name { font-weight: 600; font-size: 0.9rem; word-break: break-all; }
     .file-info .file-size { font-size: 0.75rem; opacity: 0.7; margin-top: 2px; }
     
+    /* Voice Message — WhatsApp Style */
+    .voice-bubble { padding: 12px 16px; border-radius: 14px; max-width: 360px; }
+    .voice-bubble.sent { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; }
+    .voice-bubble.received { background: white; border: 1px solid var(--border); color: var(--text); }
+    .voice-player { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .voice-play-btn { width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
+    .voice-bubble.sent .voice-play-btn { background: rgba(255,255,255,0.25); color: white; }
+    .voice-bubble.received .voice-play-btn { background: var(--yellow-soft); color: var(--primary); }
+    .voice-play-btn:hover { transform: scale(1.1); }
+    .voice-waveform { flex: 1; height: 32px; display: flex; align-items: center; gap: 2px; }
+    .voice-waveform .bar { width: 3px; border-radius: 2px; transition: height 0.1s; }
+    .voice-bubble.sent .bar { background: rgba(255,255,255,0.5); }
+    .voice-bubble.received .bar { background: var(--primary-light); }
+    .voice-duration { font-size: 0.75rem; flex-shrink: 0; min-width: 36px; text-align: right; }
+    .voice-transcript { font-size: 0.82rem; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.15); line-height: 1.4; }
+    .voice-bubble.received .voice-transcript { border-top-color: var(--border); }
+    .voice-toggle { font-size: 0.72rem; cursor: pointer; opacity: 0.7; text-decoration: underline; margin-top: 4px; display: inline-block; }
+    .voice-toggle:hover { opacity: 1; }
+    
+    /* YouTube Preview Card */
+    .yt-card { border-radius: 14px; overflow: hidden; max-width: 360px; cursor: pointer; transition: all 0.3s; text-decoration: none; display: block; }
+    .yt-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.12); }
+    .yt-card.sent { border: 2px solid rgba(255,255,255,0.2); }
+    .yt-card.received { border: 1px solid var(--border); }
+    .yt-thumb { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; }
+    .yt-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .yt-play-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); }
+    .yt-play-icon { width: 52px; height: 52px; background: rgba(255,0,0,0.9); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .yt-meta { padding: 10px 14px; background: white; color: var(--text); }
+    .yt-title { font-weight: 600; font-size: 0.88rem; line-height: 1.3; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #111; }
+    .yt-channel { font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+    
     /* Chat Input */
-    .chat-input-area { padding: 16px 24px; background: white; border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
+    .chat-input-area { padding: 12px 20px; background: white; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
     .chat-input-area input { margin-bottom: 0; border-radius: 24px; padding: 12px 20px; flex: 1; }
     .chat-input-area button { width: auto; border-radius: 24px; padding: 12px 24px; }
     
-    /* Plus button for file upload */
-    .btn-attach { 
-      width: 44px; height: 44px; border-radius: 50%; padding: 0; 
+    /* Action buttons in chat input */
+    .btn-attach, .btn-mic { 
+      width: 42px; height: 42px; border-radius: 50%; padding: 0; 
       background: var(--yellow-soft); color: var(--primary); 
-      font-size: 1.5rem; display: flex; align-items: center; justify-content: center;
-      border: 2px solid var(--border); transition: all 0.3s; flex-shrink: 0;
+      font-size: 1.3rem; display: flex; align-items: center; justify-content: center;
+      border: 2px solid var(--border); transition: all 0.3s; flex-shrink: 0; cursor: pointer;
     }
     .btn-attach:hover { background: var(--primary); color: white; transform: rotate(90deg) scale(1.1); box-shadow: 0 6px 16px rgba(184,134,11,0.3); }
+    .btn-mic:hover { background: var(--danger); color: white; border-color: var(--danger); box-shadow: 0 6px 16px rgba(198,40,40,0.3); }
+    
+    /* Recording overlay */
+    .recording-overlay { position: absolute; inset: 0; background: rgba(198,40,40,0.95); display: flex; align-items: center; justify-content: center; gap: 16px; border-radius: 0; z-index: 10; color: white; }
+    .recording-pulse { width: 14px; height: 14px; background: white; border-radius: 50%; animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.4); opacity: 0.5; } }
+    .recording-timer { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .recording-cancel { padding: 8px 16px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); border-radius: 20px; color: white; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: all 0.2s; }
+    .recording-cancel:hover { background: rgba(255,255,255,0.3); }
+    .recording-send { padding: 8px 16px; background: white; color: var(--danger); border: none; border-radius: 20px; cursor: pointer; font-weight: 700; font-size: 0.85rem; transition: all 0.2s; }
+    .recording-send:hover { transform: scale(1.05); }
     
     /* Empty Chat State */
     .chat-empty { flex:1; display:flex; align-items:center; justify-content:center; flex-direction:column; color:var(--text-muted); }
@@ -181,7 +232,7 @@
       <div class="feature-list">
         <div>🧠 AI-powered semantic matchmaking</div>
         <div>📍 Hyperlocal distance-based discovery</div>
-        <div>💬 Secure chat with file sharing</div>
+        <div>🎤 Voice messages with AI translation</div>
         <div>🪙 Credit-based trust economy</div>
       </div>
     </div>
@@ -193,8 +244,8 @@
         </div>
 
         <div id="formLogin">
-          <input type="email" id="loginEmail" placeholder="Email address" value="alice@example.com">
-          <input type="password" id="loginPwd" placeholder="Password" value="password123">
+          <input type="email" id="loginEmail" placeholder="Email address">
+          <input type="password" id="loginPwd" placeholder="Password">
           <button onclick="login()">Sign In</button>
         </div>
 
@@ -207,6 +258,14 @@
             <input type="number" id="regLat" placeholder="Latitude" step="any">
             <input type="number" id="regLon" placeholder="Longitude" step="any">
           </div>
+          <select id="regLang">
+            <option value="English">🌐 Preferred Language: English</option>
+            <option value="Telugu">🌐 Telugu</option>
+            <option value="Hindi">🌐 Hindi</option>
+            <option value="Tamil">🌐 Tamil</option>
+            <option value="Kannada">🌐 Kannada</option>
+            <option value="Malayalam">🌐 Malayalam</option>
+          </select>
           <input type="text" id="regOffered" placeholder="Skills you Offer (comma separated)">
           <input type="text" id="regNeeded" placeholder="Skills you Need (comma separated)">
           <button onclick="register()">Create Account & Embed Skills</button>
@@ -289,11 +348,20 @@
               <span style="font-size:1.3rem;">💬</span> Chat with <span id="chatPartnerName" style="color: var(--primary);">User</span>
             </div>
             <div class="chat-messages" id="messagesContainer"></div>
-            <div class="chat-input-area">
-              <button class="btn-attach" onclick="document.getElementById('fileInput').click()" title="Share files (PDF, DOCX, Images)">+</button>
+            <div class="chat-input-area" style="position:relative;">
+              <!-- Recording Overlay -->
+              <div id="recordingOverlay" class="recording-overlay hidden">
+                <div class="recording-pulse"></div>
+                <span class="recording-timer" id="recordingTimer">0:00</span>
+                <button class="recording-cancel" onclick="cancelRecording()">✕ Cancel</button>
+                <button class="recording-send" onclick="stopAndSendRecording()">Send ▶</button>
+              </div>
+              <!-- Normal Input -->
+              <button class="btn-attach" onclick="document.getElementById('fileInput').click()" title="Share files">+</button>
               <input type="file" id="fileInput" style="display:none;" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.txt,.pptx,.xlsx" onchange="uploadFile(this)">
               <input type="text" id="chatInput" placeholder="Type a message..." onkeypress="if(event.key === 'Enter') sendMessage()">
-              <button onclick="sendMessage()">Send</button>
+              <button onclick="sendMessage()" style="padding: 12px 20px;">Send</button>
+              <button class="btn-mic" id="micBtn" onpointerdown="startRecording()" title="Hold to record voice">🎤</button>
             </div>
           </div>
           <div id="chatEmptyState" class="chat-empty">
@@ -311,7 +379,7 @@
   <div id="uploadOverlay" class="upload-progress hidden">
     <div class="upload-card">
       <div class="spinner"></div>
-      <p style="font-weight:600;">Uploading file...</p>
+      <p style="font-weight:600;">Uploading...</p>
     </div>
   </div>
 
@@ -320,6 +388,13 @@
   let currentUserId = null;
   let activeMatchId = null;
   let chatPollInterval = null;
+
+  // Voice recording state
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let recordingStartTime = null;
+  let recordingTimerInterval = null;
+  let isRecording = false;
 
   if (token) {
     document.getElementById('authView').classList.add('hidden');
@@ -364,31 +439,56 @@
     return icons[ext] || '📎';
   }
 
+  function formatTime(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'Z');
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatDuration(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
   // ========== AUTH ==========
   async function register() {
+    const emailStr = document.getElementById('regEmail').value.trim();
+    const pwdStr = document.getElementById('regPwd').value;
+    if (!emailStr || !pwdStr) { alert("Email and password are required."); return; }
+    
     const data = {
-      name: document.getElementById('regName').value,
-      email: document.getElementById('regEmail').value,
-      password: document.getElementById('regPwd').value,
-      city: document.getElementById('regCity').value,
+      name: document.getElementById('regName').value.trim(),
+      email: emailStr,
+      password: pwdStr,
+      city: document.getElementById('regCity').value.trim(),
       lat: parseFloat(document.getElementById('regLat').value || 0),
       lon: parseFloat(document.getElementById('regLon').value || 0),
       bio: "Ready to swap skills.",
-      skills_offered: document.getElementById('regOffered').value.split(',').map(s=>s.trim()),
-      skills_needed: document.getElementById('regNeeded').value.split(',').map(s=>s.trim())
+      skills_offered: document.getElementById('regOffered').value.split(',').map(s=>s.trim()).filter(Boolean),
+      skills_needed: document.getElementById('regNeeded').value.split(',').map(s=>s.trim()).filter(Boolean),
+      preferred_language: document.getElementById('regLang').value
     };
     const res = await fetch('/api/auth/register', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-    if (res.ok) { toast("✅ Account created! Please sign in."); toggleAuth('login'); }
+    if (res.ok) { 
+      toast("✅ Account created! Please sign in."); 
+      document.getElementById('loginEmail').value = emailStr;
+      toggleAuth('login'); 
+    }
     else { const err = await res.json(); alert("Registration failed: " + err.detail); }
   }
 
   async function login() {
+    const emailStr = document.getElementById('loginEmail').value.trim();
+    const pwdStr = document.getElementById('loginPwd').value;
+    if (!emailStr || !pwdStr) { alert("Please enter email and password."); return; }
+    
     const res = await fetch('/api/auth/login', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email: document.getElementById('loginEmail').value, password: document.getElementById('loginPwd').value })
+      body: JSON.stringify({ email: emailStr, password: pwdStr })
     });
     if (res.ok) { const json = await res.json(); localStorage.setItem('token', json.token); location.reload(); }
-    else alert("Login failed.");
+    else alert("Login failed. Please check your credentials.");
   }
 
   // ========== DASHBOARD ==========
@@ -514,7 +614,55 @@
       c.innerHTML = data.messages.map(m => {
         const isMine = m.sender_id === currentUserId;
         const cls = isMine ? 'sent' : 'received';
-        // Check if it's a file message
+        const time = formatTime(m.created_at);
+
+        // ===== VOICE MESSAGE =====
+        if (m.msg_type === 'voice') {
+          const transcript = isMine ? m.original_text : (m.translated_text || m.original_text);
+          const altTranscript = isMine ? '' : m.original_text;
+          const showToggle = !isMine && m.translation_status === 'completed' && m.translated_text !== m.original_text;
+          const waveformBars = Array.from({length: 28}, () => {
+            const h = Math.floor(Math.random() * 20) + 6;
+            return `<div class="bar" style="height:${h}px;"></div>`;
+          }).join('');
+          return `
+            <div class="msg-wrapper ${cls}">
+              <div class="voice-bubble ${cls}">
+                <div class="voice-player">
+                  <button class="voice-play-btn" onclick="toggleVoicePlay(this, '/api/audio/${m.filename}')">▶</button>
+                  <div class="voice-waveform">${waveformBars}</div>
+                  <span class="voice-duration">${formatDuration(m.duration || 0)}</span>
+                </div>
+                ${transcript ? `
+                  <div class="voice-transcript" id="vt-${m.id}">
+                    ${m.translation_status === 'completed' && !isMine ? '🌐 ' : ''}${transcript}
+                  </div>
+                  ${showToggle ? `<span class="voice-toggle" onclick="toggleTranscript('${m.id}', '${btoa(encodeURIComponent(transcript))}', '${btoa(encodeURIComponent(altTranscript))}')">View Original</span>` : ''}
+                ` : ''}
+              </div>
+              <div class="msg-time">${time}</div>
+            </div>`;
+        }
+
+        // ===== YOUTUBE PREVIEW =====
+        if (m.msg_type === 'youtube') {
+          return `
+            <div class="msg-wrapper ${cls}">
+              <a href="${m.url}" target="_blank" class="yt-card ${cls}">
+                <div class="yt-thumb">
+                  <img src="${m.thumbnail}" alt="${m.title}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22180%22%3E%3Crect fill=%22%23222%22 width=%22320%22 height=%22180%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2216%22%3EVideo%3C/text%3E%3C/svg%3E'">
+                  <div class="yt-play-overlay"><div class="yt-play-icon">▶</div></div>
+                </div>
+                <div class="yt-meta">
+                  <div class="yt-title">${m.title || 'YouTube Video'}</div>
+                  <div class="yt-channel">📺 ${m.channel || 'YouTube'}</div>
+                </div>
+              </a>
+              <div class="msg-time">${time}</div>
+            </div>`;
+        }
+
+        // ===== FILE MESSAGE =====
         try {
           const meta = JSON.parse(m.content);
           if (meta.type === 'file') {
@@ -525,23 +673,145 @@
               preview = `<img src="/api/files/${meta.stored_as}" style="max-width:240px; border-radius:10px; margin-top:8px; display:block;" alt="${meta.filename}">`;
             }
             return `
-              <a href="/api/files/${meta.stored_as}" target="_blank" download="${meta.filename}" class="file-bubble ${cls}" style="text-decoration:none;">
-                <div class="file-icon">${icon}</div>
-                <div class="file-info">
-                  <div class="file-name">${meta.filename}</div>
-                  <div class="file-size">${formatFileSize(meta.size)}</div>
-                </div>
-              </a>
-              ${isImg ? `<div style="align-self:${isMine?'flex-end':'flex-start'};">${preview}</div>` : ''}
-            `;
+              <div class="msg-wrapper ${cls}">
+                <a href="/api/files/${meta.stored_as}" target="_blank" download="${meta.filename}" class="file-bubble ${cls}" style="text-decoration:none;">
+                  <div class="file-icon">${icon}</div>
+                  <div class="file-info">
+                    <div class="file-name">${meta.filename}</div>
+                    <div class="file-size">${formatFileSize(meta.size)}</div>
+                  </div>
+                </a>
+                ${isImg ? `<div style="align-self:${isMine?'flex-end':'flex-start'};">${preview}</div>` : ''}
+                <div class="msg-time">${time}</div>
+              </div>`;
           }
         } catch(e) {}
-        return `<div class="message ${cls}">${m.content}</div>`;
+
+        // ===== NORMAL TEXT =====
+        return `
+          <div class="msg-wrapper ${cls}">
+            <div class="message ${cls}">${m.content}</div>
+            <div class="msg-time">${time}</div>
+          </div>`;
       }).join('');
     }
     if (atBottom) c.scrollTop = c.scrollHeight;
   }
 
+  // ========== Voice Playback ==========
+  let currentAudio = null;
+  function toggleVoicePlay(btn, audioUrl) {
+    if (currentAudio && !currentAudio.paused) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      document.querySelectorAll('.voice-play-btn').forEach(b => b.innerText = '▶');
+      if (currentAudio._btn === btn) { currentAudio = null; return; }
+    }
+    const audio = new Audio(audioUrl);
+    audio._btn = btn;
+    currentAudio = audio;
+    btn.innerText = '⏸';
+    audio.play();
+    audio.onended = () => { btn.innerText = '▶'; currentAudio = null; };
+  }
+
+  function toggleTranscript(msgId, encodedTranslated, encodedOriginal) {
+    const el = document.getElementById('vt-' + msgId);
+    const toggle = el.parentElement.querySelector('.voice-toggle');
+    if (!el || !toggle) return;
+    if (toggle.innerText === 'View Original') {
+      el.innerHTML = decodeURIComponent(atob(encodedOriginal));
+      toggle.innerText = 'View Translated';
+    } else {
+      el.innerHTML = '🌐 ' + decodeURIComponent(atob(encodedTranslated));
+      toggle.innerText = 'View Original';
+    }
+  }
+
+  // ========== Voice Recording ==========
+  async function startRecording() {
+    if (isRecording) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+      audioChunks = [];
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+      mediaRecorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); };
+      mediaRecorder.start();
+      isRecording = true;
+      recordingStartTime = Date.now();
+      document.getElementById('recordingOverlay').classList.remove('hidden');
+      updateRecordingTimer();
+      recordingTimerInterval = setInterval(updateRecordingTimer, 1000);
+      // Auto-stop at 5 minutes
+      setTimeout(() => { if (isRecording) stopAndSendRecording(); }, 5 * 60 * 1000);
+    } catch(e) {
+      alert("Microphone access denied. Please allow microphone permission.");
+    }
+  }
+
+  function updateRecordingTimer() {
+    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    document.getElementById('recordingTimer').innerText = `${m}:${s.toString().padStart(2,'0')}`;
+  }
+
+  function cancelRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    isRecording = false;
+    clearInterval(recordingTimerInterval);
+    audioChunks = [];
+    document.getElementById('recordingOverlay').classList.add('hidden');
+    toast("Recording cancelled.");
+  }
+
+  async function stopAndSendRecording() {
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+    const duration = (Date.now() - recordingStartTime) / 1000;
+    
+    mediaRecorder.onstop = async () => {
+      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+      isRecording = false;
+      clearInterval(recordingTimerInterval);
+      document.getElementById('recordingOverlay').classList.add('hidden');
+      
+      if (audioChunks.length === 0) return;
+      
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      if (blob.size > 15 * 1024 * 1024) { alert("Recording too large. Max 15MB."); return; }
+      
+      document.getElementById('uploadOverlay').classList.remove('hidden');
+      
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const base64 = e.target.result.split(',')[1];
+        try {
+          const res = await fetch(`/api/chat/${activeMatchId}/voice`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+            body: JSON.stringify({ data: base64, duration: duration })
+          });
+          if (res.ok) {
+            toast("🎤 Voice message sent!");
+            fetchMessages();
+          } else {
+            const err = await res.json();
+            alert("Voice upload failed: " + err.detail);
+          }
+        } catch(err) {
+          alert("Voice upload error: " + err.message);
+        }
+        document.getElementById('uploadOverlay').classList.add('hidden');
+      };
+      reader.readAsDataURL(blob);
+    };
+    mediaRecorder.stop();
+  }
+
+  // ========== Send Message ==========
   async function sendMessage() {
     const input = document.getElementById('chatInput');
     const content = input.value.trim();

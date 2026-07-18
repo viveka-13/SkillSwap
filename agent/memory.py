@@ -92,9 +92,41 @@ def init_db():
             is_read BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS VoiceMessages (
+            id TEXT PRIMARY KEY,
+            match_id TEXT,
+            sender_id TEXT,
+            filename TEXT,
+            duration REAL DEFAULT 0,
+            original_text TEXT DEFAULT '',
+            translated_text TEXT DEFAULT '',
+            language_code TEXT DEFAULT '',
+            translation_status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS YoutubeLinks (
+            id TEXT PRIMARY KEY,
+            match_id TEXT,
+            sender_id TEXT,
+            url TEXT,
+            video_id TEXT,
+            title TEXT DEFAULT '',
+            thumbnail TEXT DEFAULT '',
+            channel TEXT DEFAULT '',
+            duration TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
     """)
-    conn.commit()
-    conn.close()
+    # Safely add preferred_language to Users if it doesn't exist
+    try:
+        c.execute("ALTER TABLE Users ADD COLUMN preferred_language TEXT DEFAULT 'English'")
+    except:
+        pass  # Column already exists
+    
+    try:
+        conn.commit()
+    finally:
+        conn.close()
 
 init_db()
 
@@ -106,18 +138,22 @@ def _get_conn():
 
 def run_query(query: str, params: tuple = ()):
     conn = _get_conn()
-    c = conn.cursor()
-    c.execute(query, params)
-    conn.commit()
-    lastrowid = c.lastrowid
-    conn.close()
-    return lastrowid
+    try:
+        c = conn.cursor()
+        c.execute(query, params)
+        conn.commit()
+        lastrowid = c.lastrowid
+        return lastrowid
+    finally:
+        conn.close()
 
 def fetch_query(query: str, params: tuple = ()):
     conn = _get_conn()
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute(query, params)
-    rows = [dict(row) for row in c.fetchall()]
-    conn.close()
-    return rows
+    try:
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute(query, params)
+        rows = [dict(row) for row in c.fetchall()]
+        return rows
+    finally:
+        conn.close()
