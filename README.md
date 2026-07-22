@@ -18,7 +18,7 @@ Many individuals have valuable skills but lack financial resources to access ser
 | Matching | Keyword-based search | AI Semantic Matching (ChromaDB + LLM) |
 | Location | City-level | Hyperlocal (Haversine distance in KM) |
 | Trust | Star ratings only | AI-computed Trust Score + Credit Wallet |
-| Communication | Basic text chat | Chat + Document/Image/PDF Sharing |
+| Communication | Basic text chat | Chat + File Sharing + AI Voice Translations |
 | Cost | Paid services | Zero money — purely skill-based exchange |
 
 ---
@@ -101,10 +101,12 @@ The matchmaking engine is a **4-node LangGraph state machine**:
 - The **trust score** is the average of all ratings received.
 - Higher trust = better visibility in matchmaking.
 
-### 6. 💬 Secure Communication Channel
+### 6. 💬 Advanced Communication Channel
 - Once a match is **accepted**, a private **Chat Room** is created between both users.
 - Real-time-like messaging with **3-second polling**.
-- Messages are stored securely in the **Messages** database table.
+- **🎤 WhatsApp-Style Voice Messaging**: Users can record and send voice notes directly in the browser using the `MediaRecorder` API.
+- **🌐 AI Auto-Translation**: Voice messages are transcribed using **Groq Whisper** and translated on-the-fly using **Llama 3.1** if the sender and receiver have different preferred languages.
+- **🎥 YouTube Rich Previews**: Automatically detects YouTube links in messages and fetches video metadata/thumbnails via OEmbed for beautiful inline preview cards.
 
 ### 7. 📎 File & Document Sharing
 - Users can share **PDFs, DOCX, PPTX, Images (JPG/PNG)**, and more via the `+` button in chat.
@@ -190,8 +192,9 @@ Step 6: Users Rate Each Other
 | `GET` | `/api/exchange/history` | Completed exchange history |
 | `GET` | `/api/chat/rooms` | List active chat rooms |
 | `GET` | `/api/chat/{id}/messages` | Get chat message history |
-| `POST` | `/api/chat/{id}/send` | Send a text message |
+| `POST` | `/api/chat/{id}/send` | Send a text message (auto-detects YouTube links) |
 | `POST` | `/api/chat/{id}/upload` | Upload a file (PDF, DOCX, Image) |
+| `POST` | `/api/chat/{id}/voice` | Upload a voice note (triggers Whisper STT + Llama Translation) |
 | `GET` | `/api/files/{filename}` | Download a shared file |
 | `GET` | `/api/notifications` | Get user notifications |
 
