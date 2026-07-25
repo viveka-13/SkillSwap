@@ -6,7 +6,7 @@ import re
 import urllib.request
 from datetime import datetime, timedelta
 import base64
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -30,6 +30,44 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[str, WebSocket] = {}
+
+    async def connect(self, websocket: WebSocket, user_id: str):
+        await websocket.accept()
+        self.active_connections[user_id] = websocket
+
+    def disconnect(self, user_id: str):
+        if user_id in self.active_connections:
+            del self.active_connections[user_id]
+
+    async def send_personal_message(self, message: str, user_id: str):
+        if user_id in self.active_connections:
+            try:
+                await self.active_connections[user_id].send_text(message)
+            except Exception:
+                self.disconnect(user_id)
+
+call_manager = ConnectionManager()
+
+@app.websocket("/api/ws/calls/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    await call_manager.connect(websocket, user_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            try:
+                msg = json.loads(data)
+                target_id = msg.get("target")
+                if target_id:
+                    msg["sender"] = user_id
+                    await call_manager.send_personal_message(json.dumps(msg), target_id)
+            except Exception as e:
+                print(f"WS Msg Error: {e}")
+    except WebSocketDisconnect:
+        call_manager.disconnect(user_id)
 
 SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-hackathon-key")
 
@@ -264,11 +302,34 @@ async def get_chat_messages(match_id: str, user_id: str = Depends(get_current_us
         y["msg_type"] = "youtube"
         y["content"] = ""  # placeholder
     
+    # Calls
+    call_msgs = fetch_query("SELECT id, match_id, caller_id, receiver_id, call_type, status, duration, created_at FROM Calls WHERE match_id = ? ORDER BY created_at ASC", (match_id,))
+    for c in call_msgs:
+        c["msg_type"] = "call_log"
+        c["sender_id"] = c["caller_id"]  # Normalize for frontend rendering
+        c["content"] = ""
+
     # Merge and sort all messages by created_at
-    all_msgs = text_msgs + voice_msgs + yt_msgs
+    all_msgs = text_msgs + voice_msgs + yt_msgs + call_msgs
     all_msgs.sort(key=lambda x: x.get("created_at", ""))
     
     return {"messages": all_msgs}
+
+class CallLogRequest(BaseModel):
+    match_id: str
+    receiver_id: str
+    call_type: str
+    status: str
+    duration: int
+
+@app.post("/api/calls/log")
+async def log_call(req: CallLogRequest, user_id: str = Depends(get_current_user_id)):
+    call_id = str(uuid.uuid4())
+    run_query(
+        "INSERT INTO Calls (id, match_id, caller_id, receiver_id, call_type, status, duration) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (call_id, req.match_id, user_id, req.receiver_id, req.call_type, req.status, req.duration)
+    )
+    return {"status": "logged"}
 
 @app.post("/api/chat/{match_id}/send")
 async def send_chat_message(match_id: str, req: ChatRequest, user_id: str = Depends(get_current_user_id)):

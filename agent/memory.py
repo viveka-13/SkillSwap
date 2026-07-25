@@ -116,6 +116,16 @@ def init_db():
             duration TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS Calls (
+            id TEXT PRIMARY KEY,
+            match_id TEXT,
+            caller_id TEXT,
+            receiver_id TEXT,
+            call_type TEXT,
+            status TEXT DEFAULT 'completed',
+            duration INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     # Safely add preferred_language to Users if it doesn't exist
     try:
