@@ -18,7 +18,7 @@ Many individuals have valuable skills but lack financial resources to access ser
 | Matching | Keyword-based search | AI Semantic Matching (ChromaDB + LLM) |
 | Location | City-level | Hyperlocal (Haversine distance in KM) |
 | Trust | Star ratings only | AI-computed Trust Score + Credit Wallet |
-| Communication | Basic text chat | Chat + File Sharing + AI Voice Translations |
+| Communication | Basic text chat | Chat, File Sharing, AI Voice Translations, & WebRTC Calling |
 | Cost | Paid services | Zero money — purely skill-based exchange |
 
 ---
@@ -59,10 +59,12 @@ Many individuals have valuable skills but lack financial resources to access ser
 | Layer | Technology | Purpose |
 |---|---|---|
 | **Backend** | FastAPI (Python) | REST APIs, Authentication, Business Logic |
+| **Real-Time Comm** | WebSockets & WebRTC | Zero-latency P2P Audio/Video calling & signaling |
 | **AI Framework** | LangGraph + LangChain | Multi-step AI agent workflow for matchmaking |
-| **LLM** | Groq (Llama 3.1 8B Instant) | Compatibility scoring & AI reasoning |
+| **LLM** | Groq (Llama 3.1 8B Instant) | Compatibility scoring, translation, & AI reasoning |
+| **STT** | Groq (Whisper-large-v3) | Fast, accurate voice message transcription |
 | **Vector Database** | ChromaDB | Semantic skill search via embeddings |
-| **Relational Database** | SQLite (WAL Mode) | Users, Skills, Matches, Messages, Credits |
+| **Relational Database** | SQLite (WAL Mode) | Users, Skills, Matches, Messages, Calls, Credits |
 | **Authentication** | JWT + Bcrypt | Secure login with hashed passwords |
 | **Frontend** | HTML, CSS, JavaScript (SPA) | Premium UI with glassmorphism & animations |
 | **File Storage** | Server-side (Base64 upload) | PDF, DOCX, Image sharing in chat |
@@ -101,12 +103,13 @@ The matchmaking engine is a **4-node LangGraph state machine**:
 - The **trust score** is the average of all ratings received.
 - Higher trust = better visibility in matchmaking.
 
-### 6. 💬 Advanced Communication Channel
+### 6. 💬 Advanced Communication Channel (WebSockets & WebRTC)
 - Once a match is **accepted**, a private **Chat Room** is created between both users.
-- Real-time-like messaging with **3-second polling**.
-- **🎤 WhatsApp-Style Voice Messaging**: Users can record and send voice notes directly in the browser using the `MediaRecorder` API.
+- **📞 Real-Time Audio & Video Calling**: Features native WhatsApp-style peer-to-peer (P2P) calling using **WebRTC** for zero-latency communication. **FastAPI WebSockets** act as the signaling server to instantly route connection offers.
+- **🎤 Native Voice Messaging**: Users can record and send voice notes directly in the browser using the `MediaRecorder` API.
 - **🌐 AI Auto-Translation**: Voice messages are transcribed using **Groq Whisper** and translated on-the-fly using **Llama 3.1** if the sender and receiver have different preferred languages.
 - **🎥 YouTube Rich Previews**: Automatically detects YouTube links in messages and fetches video metadata/thumbnails via OEmbed for beautiful inline preview cards.
+- **📜 Persistent Call History**: Audio and Video call logs (including duration, missed/rejected states) are merged seamlessly into the chat feed.
 
 ### 7. 📎 File & Document Sharing
 - Users can share **PDFs, DOCX, PPTX, Images (JPG/PNG)**, and more via the `+` button in chat.
@@ -165,6 +168,9 @@ Step 6: Users Rate Each Other
 | **Skills** | id, user_id, skill_name, type (offered/needed) | Skill listings |
 | **Matches** | id, user1_id, user2_id, compatibility_score, ai_reasoning, status | Match tracking |
 | **Messages** | id, match_id, sender_id, content, is_flagged | Chat messages & file metadata |
+| **VoiceMessages**| id, match_id, sender_id, filename, translated_text | Audio voice notes |
+| **YoutubeLinks**| id, match_id, url, title, thumbnail | Rich YouTube previews |
+| **Calls** | id, match_id, caller_id, call_type, status, duration | WebRTC call history |
 | **ExchangeHistory** | id, match_id, credits_transferred, completed_at | Completed exchanges |
 | **Ratings** | id, exchange_id, reviewer_id, reviewee_id, rating, review_text | Trust ratings |
 | **Notifications** | id, user_id, content, is_read | User notifications |
@@ -195,6 +201,8 @@ Step 6: Users Rate Each Other
 | `POST` | `/api/chat/{id}/send` | Send a text message (auto-detects YouTube links) |
 | `POST` | `/api/chat/{id}/upload` | Upload a file (PDF, DOCX, Image) |
 | `POST` | `/api/chat/{id}/voice` | Upload a voice note (triggers Whisper STT + Llama Translation) |
+| `WS` | `/api/ws/calls/{user_id}` | WebSocket endpoint for WebRTC signaling |
+| `POST` | `/api/calls/log` | Log WebRTC call history to database |
 | `GET` | `/api/files/{filename}` | Download a shared file |
 | `GET` | `/api/notifications` | Get user notifications |
 
