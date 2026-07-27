@@ -593,6 +593,22 @@
             </div>
             <div class="match-score">${m.compatibility_score}%</div>
           </div>
+          
+          <div style="display:flex; gap: 16px; margin-bottom: 12px; font-size: 0.9rem;">
+            <div style="flex:1; background: #f8f9fa; padding: 12px; border-radius: 8px;">
+              <strong style="color:var(--text);">They can teach you:</strong>
+              <ul style="margin: 4px 0 0; padding-left: 0; color:var(--text-muted); list-style:none;">
+                ${(m.skills_they_can_teach || []).map(s => `<li>✓ ${s}</li>`).join('')}
+              </ul>
+            </div>
+            <div style="flex:1; background: #f0fdf4; padding: 12px; border-radius: 8px; border: 1px solid #dcfce7;">
+              <strong style="color:var(--success);">Your skills useful for them:</strong>
+              <ul style="margin: 4px 0 0; padding-left: 0; color:var(--success); list-style:none;">
+                ${(m.skills_you_can_help_them_with || []).map(s => `<li>✓ ${s}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+
           <div class="ai-reasoning">🤖 ${m.ai_reasoning}</div>
           <div style="text-align:right; margin-top:16px;">
             <button onclick="sendRequest('${m.id}',${m.compatibility_score},'${sr}',this)" style="width:auto;">💬 Request Exchange</button>
