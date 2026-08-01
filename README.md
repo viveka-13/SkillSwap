@@ -80,13 +80,14 @@ Many individuals have valuable skills but lack financial resources to access ser
 - Upon registration, skills are **embedded into ChromaDB** as vectors for semantic search.
 
 ### 2. 🧠 AI-Powered Matchmaking (LangGraph Pipeline)
-The matchmaking engine is a **4-node LangGraph state machine**:
+The matchmaking engine is a **5-node LangGraph state machine**:
 
 | Node | What It Does |
 |---|---|
-| **Fetch User Profile** | Loads the current user's location (lat/lon) from SQLite |
-| **Semantic Matching** | Queries ChromaDB to find users whose *offered* skills semantically match what the current user *needs*. (e.g., "Python" matches "Backend Development") |
-| **Compatibility Scoring** | For each candidate, the **Groq LLM (Llama 3.1)** generates a 0-100% compatibility score and a 1-sentence AI reasoning based on skills, distance, and trust |
+| **Fetch User Profile** | Loads the current user's location (lat/lon) and full skill profile from SQLite |
+| **Semantic Matching** | Queries ChromaDB to find users whose *offered* skills semantically match what the current user *needs*. |
+| **Mutual Exchange Validation** | Strictly validates a two-way skill exchange (they offer what you need AND you offer what they need). Bypasses LLM scoring for one-sided matches. |
+| **Compatibility Scoring** | For valid matches, the **Groq LLM (Llama 3.1)** generates a 0-100% compatibility score and a 1-sentence AI reasoning emphasizing the mutual exchange |
 | **Finalize Recommendations** | Sorts by score and returns the **Top 5** matches |
 
 ### 3. 📍 Hyperlocal Distance Calculation
@@ -134,8 +135,9 @@ Step 1: User A Registers
 Step 2: User A Searches for Matches
    ├── Enters: "I need Cooking, I offer Python"
    ├── ChromaDB finds users who OFFER "Cooking" (semantic match)
-   ├── LLM scores each candidate (0-100%)
-   └── Returns Top 5 matches with AI reasoning
+   ├── LangGraph validates a strict TWO-WAY mutual skill exchange
+   ├── LLM scores each validated candidate (0-100%)
+   └── Returns Top 5 matches with a breakdown of "They can teach you" & "Your skills useful for them"
 
 Step 3: User A Sends Exchange Request to User B
    ├── Match record created in SQLite (status: "pending")
