@@ -205,33 +205,105 @@ async def send_exchange_request(req: ExchangeRequest, user_id: str = Depends(get
         "INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)",
         (notif_id, req.matched_user_id, f"🤝 {sender_name} wants to exchange skills with you! (Match: {req.compatibility_score}%)")
     )
-    return {"status": "sent", "match_id": match_id}
-
-@app.post("/api/exchange/accept/{match_id}")
+    return {"status": "sent", "match_id": match_id}@app.post("/api/exchange/accept/{match_id}")
 async def accept_exchange(match_id: str, user_id: str = Depends(get_current_user_id)):
-    """Accept an exchange request — transfers credits and logs history."""
+    """Accept an exchange request - holds credits in escrow."""
     match = fetch_query("SELECT * FROM Matches WHERE id = ? AND user2_id = ?", (match_id, user_id))
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
     if match[0]["status"] != "pending":
         raise HTTPException(status_code=400, detail="Already processed")
     
-    run_query("UPDATE Matches SET status = 'accepted' WHERE id = ?", (match_id,))
-    # Transfer credits
+    # Check requester wallet balance
+    requester = fetch_query("SELECT wallet_balance FROM Users WHERE id = ?", (match[0]["user1_id"],))
+    if not requester or requester[0]["wallet_balance"] < 5:
+        raise HTTPException(status_code=400, detail="Requester does not have enough credits to start exchange.")
+
+    # Deduct from requester and update match to in_progress with escrow
     run_query("UPDATE Users SET wallet_balance = wallet_balance - 5 WHERE id = ?", (match[0]["user1_id"],))
-    run_query("UPDATE Users SET wallet_balance = wallet_balance + 5 WHERE id = ?", (match[0]["user2_id"],))
-    # Log exchange
-    ex_id = str(uuid.uuid4())
-    run_query("INSERT INTO ExchangeHistory (id, match_id, credits_transferred) VALUES (?, ?, 5)", (ex_id, match_id))
+    run_query("UPDATE Matches SET status = 'in_progress', credits_held = 5, escrow_created_at = CURRENT_TIMESTAMP WHERE id = ?", (match_id,))
+    
     # Notify requester
     notif_id = str(uuid.uuid4())
     acceptor = fetch_query("SELECT name FROM Users WHERE id = ?", (user_id,))
     acceptor_name = acceptor[0]["name"] if acceptor else "Someone"
     run_query(
         "INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)",
-        (notif_id, match[0]["user1_id"], f"✅ {acceptor_name} accepted your exchange request! 5 credits transferred.")
+        (notif_id, match[0]["user1_id"], f"✅ {acceptor_name} accepted your exchange! 5 credits are now held in escrow.")
     )
-    return {"status": "accepted", "credits_transferred": 5}
+    return {"status": "in_progress", "credits_held": 5}
+
+@app.post("/api/exchange/{match_id}/confirm")
+async def confirm_exchange(match_id: str, user_id: str = Depends(get_current_user_id)):
+    """Confirm the exchange is completed to release escrow credits."""
+    match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    match = match[0]
+    
+    if match["status"] != "in_progress":
+        if match["status"] == "completed":
+            return {"status": "completed", "message": "Exchange already completed."}
+        raise HTTPException(status_code=400, detail=f"Cannot confirm exchange in status: {match['status']}")
+        
+    is_requester = user_id == match["user1_id"]
+    
+    # Update confirmation flag
+    if is_requester:
+        run_query("UPDATE Matches SET requester_confirmed = 1 WHERE id = ?", (match_id,))
+        match = fetch_query("SELECT * FROM Matches WHERE id = ?", (match_id,))[0]
+    else:
+        run_query("UPDATE Matches SET acceptor_confirmed = 1 WHERE id = ?", (match_id,))
+        match = fetch_query("SELECT * FROM Matches WHERE id = ?", (match_id,))[0]
+        
+    if match["requester_confirmed"] and match["acceptor_confirmed"]:
+        # Both confirmed! Release credits
+        run_query("UPDATE Matches SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?", (match_id,))
+        run_query("UPDATE Users SET wallet_balance = wallet_balance + ? WHERE id = ?", (match["credits_held"], match["user2_id"]))
+        
+        # Log to ExchangeHistory
+        ex_id = str(uuid.uuid4())
+        run_query("INSERT INTO ExchangeHistory (id, match_id, credits_transferred) VALUES (?, ?, ?)", (ex_id, match_id, match["credits_held"]))
+        
+        # Notify both
+        run_query("INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)", (str(uuid.uuid4()), match["user1_id"], "🎉 Exchange completed! Credits released."))
+        run_query("INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)", (str(uuid.uuid4()), match["user2_id"], f"🎉 Exchange completed! You received {match['credits_held']} credits."))
+        
+        return {"status": "completed", "message": "Exchange completed, credits released."}
+    else:
+        # Notify the other party
+        other_user = match["user2_id"] if is_requester else match["user1_id"]
+        confirmer = fetch_query("SELECT name FROM Users WHERE id = ?", (user_id,))
+        confirmer_name = confirmer[0]["name"] if confirmer else "Someone"
+        run_query("INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)", (str(uuid.uuid4()), other_user, f"⏳ {confirmer_name} confirmed the exchange. Please confirm your side!"))
+        
+        return {"status": "waiting", "message": "Waiting on the other party to confirm."}
+
+@app.post("/api/exchange/{match_id}/cancel")
+async def cancel_exchange(match_id: str, user_id: str = Depends(get_current_user_id)):
+    """Cancel an in-progress exchange and refund credits."""
+    match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    match = match[0]
+    
+    if match["status"] == "completed":
+        raise HTTPException(status_code=409, detail="Cannot cancel an already completed exchange.")
+    if match["status"] != "in_progress":
+        raise HTTPException(status_code=400, detail="Cannot cancel exchange in this state.")
+        
+    # Refund requester
+    run_query("UPDATE Users SET wallet_balance = wallet_balance + ? WHERE id = ?", (match["credits_held"], match["user1_id"]))
+    run_query("UPDATE Matches SET status = 'cancelled', credits_held = 0 WHERE id = ?", (match_id,))
+    
+    # Notify both
+    canceller = fetch_query("SELECT name FROM Users WHERE id = ?", (user_id,))
+    canceller_name = canceller[0]["name"] if canceller else "Someone"
+    
+    run_query("INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)", (str(uuid.uuid4()), match["user1_id"], f"🚫 {canceller_name} cancelled the exchange. {match['credits_held']} credits refunded."))
+    run_query("INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)", (str(uuid.uuid4()), match["user2_id"], f"🚫 {canceller_name} cancelled the exchange."))
+    
+    return {"status": "cancelled", "message": "Exchange cancelled, credits refunded."}
 
 @app.get("/api/notifications")
 async def get_notifications(user_id: str = Depends(get_current_user_id)):
@@ -241,12 +313,17 @@ async def get_notifications(user_id: str = Depends(get_current_user_id)):
 
 @app.get("/api/exchange/pending")
 async def get_pending_requests(user_id: str = Depends(get_current_user_id)):
-    """Get pending exchange requests sent TO this user."""
+    """Get pending and in_progress exchange requests for this user."""
     pending = fetch_query(
-        """SELECT m.id, m.compatibility_score, m.ai_reasoning, m.created_at, u.name as requester_name
-           FROM Matches m JOIN Users u ON m.user1_id = u.id
-           WHERE m.user2_id = ? AND m.status = 'pending' ORDER BY m.created_at DESC""",
-        (user_id,)
+        """SELECT m.id, m.compatibility_score, m.ai_reasoning, m.created_at, m.status,
+                  m.credits_held, m.requester_confirmed, m.acceptor_confirmed, m.user1_id, m.user2_id,
+                  u1.name as requester_name, u2.name as acceptor_name
+           FROM Matches m 
+           JOIN Users u1 ON m.user1_id = u1.id
+           JOIN Users u2 ON m.user2_id = u2.id
+           WHERE (m.user1_id = ? OR m.user2_id = ?) AND m.status IN ('pending', 'in_progress')
+           ORDER BY m.created_at DESC""",
+        (user_id, user_id)
     )
     return {"pending": pending}
 
@@ -255,7 +332,7 @@ async def get_exchange_history(user_id: str = Depends(get_current_user_id)):
     """Get completed exchanges."""
     history = fetch_query(
         """SELECT eh.id, eh.completed_at, eh.credits_transferred, m.compatibility_score, m.ai_reasoning,
-                  u1.name as user1_name, u2.name as user2_name
+                  u1.name as user1_name, u2.name as user2_name, m.status
            FROM ExchangeHistory eh
            JOIN Matches m ON eh.match_id = m.id
            JOIN Users u1 ON m.user1_id = u1.id
@@ -268,11 +345,11 @@ async def get_exchange_history(user_id: str = Depends(get_current_user_id)):
 
 @app.get("/api/chat/rooms")
 async def get_chat_rooms(user_id: str = Depends(get_current_user_id)):
-    """Get all accepted matches to act as chat rooms."""
+    """Get all in_progress or completed matches to act as chat rooms."""
     rooms = fetch_query(
-        """SELECT m.id as match_id, u.id as other_user_id, u.name as other_user_name, m.compatibility_score 
+        """SELECT m.id as match_id, u.id as other_user_id, u.name as other_user_name, m.compatibility_score, m.status 
            FROM Matches m JOIN Users u ON (m.user1_id = u.id OR m.user2_id = u.id)
-           WHERE (m.user1_id = ? OR m.user2_id = ?) AND u.id != ? AND m.status = 'accepted'
+           WHERE (m.user1_id = ? OR m.user2_id = ?) AND u.id != ? AND m.status IN ('accepted', 'in_progress', 'completed')
            ORDER BY m.created_at DESC""",
         (user_id, user_id, user_id)
     )
@@ -337,8 +414,8 @@ async def send_chat_message(match_id: str, req: ChatRequest, user_id: str = Depe
     match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
     if not match:
         raise HTTPException(status_code=403, detail="Not part of this match")
-    if match[0]["status"] != "accepted":
-        raise HTTPException(status_code=400, detail="Match not accepted yet")
+    if match[0]["status"] not in ("accepted", "in_progress", "completed"):
+        raise HTTPException(status_code=400, detail="Exchange not active yet")
     
     content = req.content.strip()
     
@@ -387,8 +464,8 @@ async def upload_file_to_chat(match_id: str, req: FileUploadRequest, user_id: st
     match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
     if not match:
         raise HTTPException(status_code=403, detail="Not part of this match")
-    if match[0]["status"] != "accepted":
-        raise HTTPException(status_code=400, detail="Match not accepted yet")
+    if match[0]["status"] not in ("accepted", "in_progress", "completed"):
+        raise HTTPException(status_code=400, detail="Exchange not active yet")
     
     # Validate file type
     allowed = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png", ".gif", ".txt", ".pptx", ".xlsx"]
@@ -421,8 +498,8 @@ async def upload_voice_message(match_id: str, req: VoiceUploadRequest, user_id: 
     match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
     if not match:
         raise HTTPException(status_code=403, detail="Not part of this match")
-    if match[0]["status"] != "accepted":
-        raise HTTPException(status_code=400, detail="Match not accepted yet")
+    if match[0]["status"] not in ("accepted", "in_progress", "completed"):
+        raise HTTPException(status_code=400, detail="Exchange not active yet")
     
     # Validate size (15MB max)
     audio_bytes = base64.b64decode(req.data)

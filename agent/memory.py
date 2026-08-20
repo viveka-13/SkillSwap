@@ -52,7 +52,12 @@ def init_db():
             user2_id TEXT,
             compatibility_score REAL,
             ai_reasoning TEXT,
-            status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'rejected'
+            status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'in_progress', 'completed', 'cancelled', 'rejected'
+            credits_held INTEGER DEFAULT 0,
+            requester_confirmed BOOLEAN DEFAULT 0,
+            acceptor_confirmed BOOLEAN DEFAULT 0,
+            escrow_created_at TIMESTAMP,
+            completed_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS Messages (
@@ -133,6 +138,16 @@ def init_db():
     except:
         pass  # Column already exists
     
+    # Migrations for escrow features
+    try:
+        c.execute("ALTER TABLE Matches ADD COLUMN credits_held INTEGER DEFAULT 0")
+        c.execute("ALTER TABLE Matches ADD COLUMN requester_confirmed BOOLEAN DEFAULT 0")
+        c.execute("ALTER TABLE Matches ADD COLUMN acceptor_confirmed BOOLEAN DEFAULT 0")
+        c.execute("ALTER TABLE Matches ADD COLUMN escrow_created_at TIMESTAMP")
+        c.execute("ALTER TABLE Matches ADD COLUMN completed_at TIMESTAMP")
+    except:
+        pass # Columns already exist
+
     try:
         conn.commit()
     finally:

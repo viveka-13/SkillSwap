@@ -551,15 +551,73 @@
     const data = await res.json();
     const c = document.getElementById('pendingContainer');
     if (data.pending.length === 0) { c.innerHTML = '<p style="color:var(--text-muted);">No pending requests.</p>'; return; }
-    c.innerHTML = data.pending.map(p => `
+    c.innerHTML = data.pending.map(p => {
+      const isRequester = p.user1_id === currentUserId;
+      const otherName = isRequester ? p.acceptor_name : p.requester_name;
+      const iConfirmed = isRequester ? p.requester_confirmed : p.acceptor_confirmed;
+      const theyConfirmed = isRequester ? p.acceptor_confirmed : p.requester_confirmed;
+      
+      let actionHtml = '';
+      if (p.status === 'pending') {
+        if (!isRequester) {
+          actionHtml = `<button onclick="acceptExchange('${p.id}', this)" style="width:auto; padding:8px 16px;">Accept & Escrow 5 Credits</button>`;
+        } else {
+          actionHtml = `<span style="color:var(--text-muted); font-size:0.9rem;">Awaiting their acceptance</span>`;
+        }
+      } else if (p.status === 'in_progress') {
+        if (!iConfirmed) {
+          actionHtml = `
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span style="color:#f59e0b; font-size:0.9rem; font-weight:bold;">Credits in escrow: 5</span>
+              <button onclick="confirmExchange('${p.id}', this)" style="width:auto; padding:6px 12px; background:var(--primary); color:white;">Confirm Completion</button>
+              <button onclick="cancelExchange('${p.id}', this)" style="width:auto; padding:6px 12px; background:#ef4444; color:white;">Cancel</button>
+            </div>`;
+        } else {
+          actionHtml = `
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span style="color:#10b981; font-size:0.9rem; font-weight:bold;">You confirmed.</span>
+              <span style="color:var(--text-muted); font-size:0.9rem;">Waiting on ${otherName}...</span>
+            </div>`;
+        }
+      }
+
+      return `
       <div class="card" style="background:#fff8e1; border:1px solid #ffe082; margin-bottom:12px;">
         <div class="flex justify-between items-center">
-          <div><strong>${p.requester_name}</strong> wants to exchange! <span class="badge badge-success">${p.compatibility_score}%</span></div>
-          <button onclick="acceptExchange('${p.id}', this)" style="width:auto; padding:8px 16px;">Accept & Connect</button>
+          <div><strong>${otherName}</strong> (${p.status === 'pending' ? 'Request pending' : 'In Progress'}) <span class="badge badge-success">${p.compatibility_score}%</span></div>
+          ${actionHtml}
         </div>
         <div class="ai-reasoning">🤖 ${p.ai_reasoning}</div>
       </div>
-    `).join('');
+      `;
+    }).join('');
+  }
+
+  async function confirmExchange(matchId, btn) {
+    btn.disabled = true; btn.innerText = "Confirming...";
+    const res = await fetch(`/api/exchange/${matchId}/confirm`, { method: 'POST', headers: {'Authorization': 'Bearer ' + token} });
+    const json = await res.json();
+    if (res.ok) { 
+      toast(json.message); 
+      loadDashboard(); 
+    } else { 
+      toast("Error: " + (json.detail || "Could not confirm"));
+      btn.disabled = false; btn.innerText = "Confirm Completion"; 
+    }
+  }
+
+  async function cancelExchange(matchId, btn) {
+    if (!confirm("Are you sure you want to cancel this exchange? Credits will be refunded.")) return;
+    btn.disabled = true; btn.innerText = "Cancelling...";
+    const res = await fetch(`/api/exchange/${matchId}/cancel`, { method: 'POST', headers: {'Authorization': 'Bearer ' + token} });
+    const json = await res.json();
+    if (res.ok) { 
+      toast("Exchange cancelled and credits refunded."); 
+      loadDashboard(); 
+    } else { 
+      toast("Error: " + (json.detail || "Could not cancel"));
+      btn.disabled = false; btn.innerText = "Cancel"; 
+    }
   }
 
   async function acceptExchange(matchId, btn) {
