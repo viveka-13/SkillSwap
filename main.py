@@ -4,6 +4,7 @@ import asyncio
 import uuid
 import re
 import urllib.request
+import urllib.parse
 from datetime import datetime, timedelta
 import base64
 from fastapi import FastAPI, HTTPException, Depends, Request, WebSocket, WebSocketDisconnect
@@ -17,6 +18,55 @@ import bcrypt
 
 from agent.workflow import run_matchmaking
 from agent.memory import run_query, fetch_query, skills_collection
+
+def groq_whisper_transcribe(audio_bytes: bytes, filename: str = 'audio.webm', default_lang: str = 'English') -> tuple[str, str]:
+    """
+    Transcribes audio using Groq's Whisper API.
+    Returns a tuple of (transcribed_text, detected_language_code).
+    """
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if not groq_api_key:
+        return "[Transcription unavailable: No API Key]", default_lang
+        
+    try:
+        import http.client
+        import json
+        import uuid
+        
+        boundary = f"----WebKitFormBoundary{uuid.uuid4().hex[:16]}"
+        
+        body = b""
+        body += f"--{boundary}\r\n".encode()
+        body += f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode()
+        body += b'Content-Type: audio/webm\r\n\r\n'
+        body += audio_bytes
+        body += b'\r\n'
+        body += f"--{boundary}\r\n".encode()
+        body += b'Content-Disposition: form-data; name="model"\r\n\r\n'
+        body += b'whisper-large-v3\r\n'
+        body += f"--{boundary}\r\n".encode()
+        body += b'Content-Disposition: form-data; name="response_format"\r\n\r\n'
+        body += b'verbose_json\r\n'
+        body += f"--{boundary}--\r\n".encode()
+        
+        conn = http.client.HTTPSConnection("api.groq.com")
+        headers = {
+            "Authorization": f"Bearer {groq_api_key}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}"
+        }
+        conn.request("POST", "/openai/v1/audio/transcriptions", body=body, headers=headers)
+        resp = conn.getresponse()
+        resp_data = json.loads(resp.read().decode())
+        conn.close()
+        
+        original_text = resp_data.get("text", "")
+        language_code = resp_data.get("language", default_lang)
+        return original_text, language_code
+        
+    except Exception as e:
+        print(f"Whisper transcription failed: {e}")
+        return "[Transcription unavailable]", default_lang
+
 
 load_dotenv()
 app = FastAPI()
@@ -393,6 +443,7 @@ async def get_chat_messages(match_id: str, user_id: str = Depends(get_current_us
     return {"messages": all_msgs}
 
 class CallLogRequest(BaseModel):
+    call_id: str
     match_id: str
     receiver_id: str
     call_type: str
@@ -401,10 +452,9 @@ class CallLogRequest(BaseModel):
 
 @app.post("/api/calls/log")
 async def log_call(req: CallLogRequest, user_id: str = Depends(get_current_user_id)):
-    call_id = str(uuid.uuid4())
     run_query(
         "INSERT INTO Calls (id, match_id, caller_id, receiver_id, call_type, status, duration) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (call_id, req.match_id, user_id, req.receiver_id, req.call_type, req.status, req.duration)
+        (req.call_id, req.match_id, user_id, req.receiver_id, req.call_type, req.status, req.duration)
     )
     return {"status": "logged"}
 
@@ -527,73 +577,32 @@ async def upload_voice_message(match_id: str, req: VoiceUploadRequest, user_id: 
     translation_status = "none"
     
     # Speech-to-Text via Groq Whisper API
-    groq_api_key = os.getenv("GROQ_API_KEY")
-    if groq_api_key:
+    original_text, language_code = groq_whisper_transcribe(audio_bytes, filename=filename, default_lang=sender_lang)
+    
+    # Translation if languages differ
+    if original_text and original_text != "[Transcription unavailable]" and receiver_lang.lower() != sender_lang.lower() and language_code.lower() != receiver_lang.lower():
         try:
-            import http.client
-            import mimetypes
+            from langchain_groq import ChatGroq
+            from langchain_core.messages import HumanMessage
             
-            boundary = f"----WebKitFormBoundary{uuid.uuid4().hex[:16]}"
-            
-            # Build multipart body
-            body = b""
-            # File field
-            body += f"--{boundary}\r\n".encode()
-            body += f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode()
-            body += b'Content-Type: audio/webm\r\n\r\n'
-            body += audio_bytes
-            body += b'\r\n'
-            # Model field
-            body += f"--{boundary}\r\n".encode()
-            body += b'Content-Disposition: form-data; name="model"\r\n\r\n'
-            body += b'whisper-large-v3\r\n'
-            # Language hint (optional)
-            body += f"--{boundary}\r\n".encode()
-            body += b'Content-Disposition: form-data; name="response_format"\r\n\r\n'
-            body += b'verbose_json\r\n'
-            body += f"--{boundary}--\r\n".encode()
-            
-            conn = http.client.HTTPSConnection("api.groq.com")
-            headers = {
-                "Authorization": f"Bearer {groq_api_key}",
-                "Content-Type": f"multipart/form-data; boundary={boundary}"
-            }
-            conn.request("POST", "/openai/v1/audio/transcriptions", body=body, headers=headers)
-            resp = conn.getresponse()
-            resp_data = json.loads(resp.read().decode())
-            conn.close()
-            
-            original_text = resp_data.get("text", "")
-            language_code = resp_data.get("language", sender_lang)
-            
-        except Exception as e:
-            print(f"Whisper transcription failed: {e}")
-            original_text = "[Transcription unavailable]"
-        
-        # Translation if languages differ
-        if original_text and receiver_lang.lower() != sender_lang.lower() and language_code.lower() != receiver_lang.lower():
-            try:
-                from langchain_groq import ChatGroq
-                from langchain_core.messages import HumanMessage
-                
-                llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_api_key)
-                translate_prompt = f"""Translate the following text to {receiver_lang}. 
+            llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_api_key)
+            translate_prompt = f"""Translate the following text to {receiver_lang}. 
 Rules:
 - Do NOT translate URLs, code snippets, email addresses, or file names.
 - Keep the translation natural and conversational.
 - Return ONLY the translated text, nothing else.
 
 Text: {original_text}"""
-                response = llm.invoke([HumanMessage(content=translate_prompt)])
-                translated_text = response.content.strip()
-                translation_status = "completed"
-            except Exception as e:
-                print(f"Translation failed: {e}")
-                translated_text = original_text
-                translation_status = "failed"
-        else:
+            response = llm.invoke([HumanMessage(content=translate_prompt)])
+            translated_text = response.content.strip()
+            translation_status = "completed"
+        except Exception as e:
+            print(f"Translation failed: {e}")
             translated_text = original_text
-            translation_status = "same_language"
+            translation_status = "failed"
+    else:
+        translated_text = original_text
+        translation_status = "same_language"
     
     # Save to database
     run_query(
@@ -639,3 +648,118 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
+
+
+from fastapi import UploadFile, File
+
+CALLS_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "data", "uploads", "calls")
+os.makedirs(CALLS_AUDIO_DIR, exist_ok=True)
+
+# Temporary memory to store partial call transcripts
+call_transcripts_in_memory = {}
+
+async def process_call_summary(call_id: str, is_partial: bool = False):
+    try:
+        run_query("UPDATE Calls SET summary_status = 'processing' WHERE id = ?", (call_id,))
+        
+        merged_text = ""
+        if call_id in call_transcripts_in_memory:
+            for speaker, text in call_transcripts_in_memory[call_id].items():
+                merged_text += f"[{speaker}]: {text}\n\n"
+                
+        if not merged_text.strip():
+            run_query("UPDATE Calls SET summary_status = 'failed' WHERE id = ?", (call_id,))
+            return
+
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        if not groq_api_key:
+            run_query("UPDATE Calls SET summary_status = 'failed' WHERE id = ?", (call_id,))
+            return
+            
+        from langchain_groq import ChatGroq
+        from langchain_core.messages import HumanMessage
+        llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_api_key)
+        
+        partial_str = "true" if is_partial else "false"
+        prompt = f"""You are an AI assistant analyzing a call transcript between two users.
+Here is the transcript:
+{merged_text}
+
+Provide a summary in STRICT JSON format with the following keys exactly:
+{{
+  "summary": "2-3 sentence overview of what was discussed",
+  "key_points": ["point 1", "point 2"],
+  "action_items": ["action 1", "action 2"],
+  "is_partial": {partial_str}
+}}
+Return ONLY the raw JSON string, nothing else. Do not use markdown code blocks.
+"""
+        response = llm.invoke([HumanMessage(content=prompt)])
+        content = response.content.strip()
+        if content.startswith("```json"):
+            content = content[7:-3].strip()
+        elif content.startswith("```"):
+            content = content[3:-3].strip()
+            
+        # Validate json
+        json.loads(content)
+        
+        run_query("UPDATE Calls SET transcript = ?, summary = ?, summary_status = 'ready' WHERE id = ?", (merged_text, content, call_id))
+        
+        # Cleanup
+        if call_id in call_transcripts_in_memory:
+            del call_transcripts_in_memory[call_id]
+            
+    except Exception as e:
+        print(f"Summary failed: {e}")
+        run_query("UPDATE Calls SET summary_status = 'failed' WHERE id = ?", (call_id,))
+
+@app.post("/api/calls/{call_id}/recording")
+async def upload_call_recording(call_id: str, file: UploadFile = File(...), user_id: str = Depends(get_current_user_id)):
+    # Note: We do not check if the call exists yet, because the receiver might upload 
+    # the recording before the initiator successfully logs the call via /api/calls/log.
+    
+    audio_bytes = await file.read()
+    
+    file_path = os.path.join(CALLS_AUDIO_DIR, f"{call_id}_{user_id}.webm")
+    with open(file_path, "wb") as f:
+        f.write(audio_bytes)
+        
+    transcript_text, _ = groq_whisper_transcribe(audio_bytes, filename=file.filename)
+    
+    if call_id not in call_transcripts_in_memory:
+        call_transcripts_in_memory[call_id] = {}
+        
+    speaker_label = "Caller" if call[0]["caller_id"] == user_id else "Receiver"
+    call_transcripts_in_memory[call_id][speaker_label] = transcript_text
+    
+    # Check if both have uploaded
+    if len(call_transcripts_in_memory[call_id]) == 2:
+        asyncio.create_task(process_call_summary(call_id, is_partial=False))
+    else:
+        # Schedule timeout task to process as partial if second upload doesn't arrive
+        async def wait_and_process():
+            await asyncio.sleep(120)  # 2 minutes timeout
+            if call_id in call_transcripts_in_memory and len(call_transcripts_in_memory[call_id]) == 1:
+                await process_call_summary(call_id, is_partial=True)
+                
+        asyncio.create_task(wait_and_process())
+        
+    return {"status": "uploaded", "transcript": transcript_text}
+
+@app.get("/api/calls/{call_id}/summary")
+async def get_call_summary(call_id: str, user_id: str = Depends(get_current_user_id)):
+    call = fetch_query("SELECT * FROM Calls WHERE id = ? AND (caller_id = ? OR receiver_id = ?)", (call_id, user_id, user_id))
+    if not call:
+        raise HTTPException(status_code=403, detail="Not part of this call")
+        
+    status = call[0].get("summary_status", "none")
+    summary = call[0].get("summary", None)
+    
+    if summary:
+        try:
+            summary = json.loads(summary)
+        except:
+            summary = {"error": "Invalid JSON"}
+            
+    return {"summary_status": status, "summary": summary}

@@ -736,14 +736,28 @@
           const callIcon = m.call_type === 'video' ? '🎥' : '📞';
           const statusText = m.status === 'completed' ? `Call ended (${formatDuration(m.duration)})` : (m.status === 'missed' ? 'Missed Call' : 'Call Rejected');
           const color = (m.status === 'missed' || m.status === 'rejected') ? 'var(--danger)' : 'inherit';
+          
+          let summaryHtml = '';
+          if (m.status === 'completed') {
+              summaryHtml = `
+                <div style="margin-top: 8px;">
+                  <button onclick="pollCallSummary('${m.id}', this)" class="btn-sm" style="background:#eef2ff; color:var(--primary); padding: 4px 8px; font-size:0.8rem; border-radius:4px; border:1px solid #c7d2fe;">View AI Summary ✨</button>
+                  <div class="summary-container" style="display:none; margin-top: 8px; font-size:0.85rem; background: #f8fafc; padding: 8px; border-radius:6px; border:1px solid #e2e8f0; color:#334155;"></div>
+                </div>
+              `;
+          }
+
           return `
             <div class="msg-wrapper ${cls}">
-              <div class="message ${cls}" style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size:1.5rem;">${callIcon}</span>
-                <div>
-                  <div style="font-weight:600;">${isMine ? 'Outgoing' : 'Incoming'} Call</div>
-                  <div style="font-size:0.85rem; color:${color};">${statusText}</div>
+              <div class="message ${cls}" style="display:flex; flex-direction:column; gap:4px; min-width:200px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:1.5rem;">${callIcon}</span>
+                  <div>
+                    <div style="font-weight:600;">${isMine ? 'Outgoing' : 'Incoming'} Call</div>
+                    <div style="font-size:0.85rem; color:${color};">${statusText}</div>
+                  </div>
                 </div>
+                ${summaryHtml}
               </div>
               <div class="msg-time">${time}</div>
             </div>`;
@@ -1025,6 +1039,7 @@
           return;
         }
         currentCallId = data.match_id;
+        currentCallUuid = data.call_id;
         currentCallType = data.call_type;
         currentCallPartner = data.sender;
         
@@ -1071,6 +1086,7 @@
     if (currentCallId) return alert("Already in a call");
     
     currentCallId = activeMatchId;
+    currentCallUuid = crypto.randomUUID();
     currentCallType = type;
     currentCallPartner = activePartnerId;
     
@@ -1101,6 +1117,7 @@
       type: 'call_offer',
       target: currentCallPartner,
       match_id: currentCallId,
+      call_id: currentCallUuid,
       call_type: type,
       offer: offer
     }));
@@ -1150,10 +1167,40 @@
   }
 
   async function cleanupCall(isInitiator, status) {
+    // Capture state BEFORE resetting — the onstop callback fires asynchronously
+    const savedCallUuid = currentCallUuid;
+    const savedToken = token;
+    
+    if (callMediaRecorder && callMediaRecorder.state !== 'inactive') {
+        callMediaRecorder.onstop = async () => {
+            if (callAudioChunks.length > 0 && savedCallUuid) {
+                const blob = new Blob(callAudioChunks, { type: 'audio/webm' });
+                const formData = new FormData();
+                formData.append('file', blob, 'call_recording.webm');
+                
+                try {
+                    console.log('Uploading call recording for call:', savedCallUuid);
+                    const resp = await fetch('/api/calls/' + savedCallUuid + '/recording', {
+                        method: 'POST',
+                        headers: {'Authorization': 'Bearer ' + savedToken},
+                        body: formData
+                    });
+                    console.log('Recording upload response:', resp.status);
+                } catch(e) {
+                    console.error('Call recording upload failed:', e);
+                }
+            } else {
+                console.warn('No audio chunks or no call UUID for recording upload', callAudioChunks.length, savedCallUuid);
+            }
+        };
+        callMediaRecorder.stop();
+    }
+    
     const duration = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
     const matchId = currentCallId;
     const partnerId = currentCallPartner;
     const type = currentCallType;
+    const callUuid = savedCallUuid;
     
     if (peerConnection) { peerConnection.close(); peerConnection = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
@@ -1166,15 +1213,16 @@
     clearInterval(callTimerInterval);
     
     currentCallId = null;
+    currentCallUuid = null;
     currentCallPartner = null;
     currentCallType = null;
     callStartTime = 0;
     
-    if (isInitiator && matchId && partnerId) {
+    if (isInitiator && matchId && partnerId && callUuid) {
       await fetch('/api/calls/log', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
-        body: JSON.stringify({ match_id: matchId, receiver_id: partnerId, call_type: type, status: status, duration: duration })
+        body: JSON.stringify({ call_id: callUuid, match_id: matchId, receiver_id: partnerId, call_type: type, status: status, duration: duration })
       });
       fetchMessages();
     }
@@ -1200,6 +1248,24 @@
   
   function startCallTimer() {
     callStartTime = Date.now();
+    
+    // Start local audio recording for AI summary
+    if (localStream) {
+        try {
+            const audioStream = new MediaStream(localStream.getAudioTracks());
+            callMediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+            callAudioChunks = [];
+            
+            callMediaRecorder.ondataavailable = e => {
+                if (e.data.size > 0) callAudioChunks.push(e.data);
+            };
+            
+            callMediaRecorder.start(1000); // chunk every second
+        } catch (err) {
+            console.error("Could not start call recording:", err);
+        }
+    }
+
     callTimerInterval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
       document.getElementById('callTimerUI').innerText = formatDuration(elapsed);
@@ -1227,6 +1293,53 @@
   function switchCam() {
     toast("Camera switch requires mobile facingMode mapping, omitted for demo.");
   }
+
+  window.pollCallSummary = async function(callId, btnEl) {
+      btnEl.innerText = "Loading summary...";
+      btnEl.disabled = true;
+      const container = btnEl.nextElementSibling;
+      
+      const checkSummary = async () => {
+          try {
+              const res = await fetch(`/api/calls/${callId}/summary`, {
+                  headers: {'Authorization': 'Bearer ' + token}
+              });
+              const data = await res.json();
+              
+              if (data.summary_status === 'ready' && data.summary) {
+                  const s = data.summary;
+                  let html = `<strong>Summary:</strong> ${s.summary}<br><br>`;
+                  if (s.key_points && s.key_points.length > 0) {
+                      html += `<strong>Key Points:</strong><ul style="margin:4px 0; padding-left:20px;">${s.key_points.map(p => `<li>${p}</li>`).join('')}</ul>`;
+                  }
+                  if (s.action_items && s.action_items.length > 0) {
+                      html += `<strong>Action Items:</strong><ul style="margin:4px 0; padding-left:20px;">${s.action_items.map(p => `<li>${p}</li>`).join('')}</ul>`;
+                  }
+                  if (s.is_partial) {
+                      html += `<em style="color:#64748b; font-size:0.75rem;">(Partial transcript due to missing peer audio)</em>`;
+                  }
+                  
+                  container.innerHTML = html;
+                  container.style.display = 'block';
+                  btnEl.style.display = 'none';
+              } else if (data.summary_status === 'processing' || data.summary_status === 'none') {
+                  btnEl.innerText = "Processing AI Summary...";
+                  setTimeout(checkSummary, 5000);
+              } else if (data.summary_status === 'failed') {
+                  btnEl.innerText = "Summary unavailable";
+                  btnEl.style.color = "var(--danger)";
+                  btnEl.style.borderColor = "var(--danger)";
+              }
+          } catch (e) {
+              console.error("Summary error", e);
+              btnEl.innerText = "Error loading summary";
+              btnEl.disabled = false;
+          }
+      };
+      
+      checkSummary();
+  }
 </script>
+
 </body>
 </html>

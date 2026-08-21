@@ -129,7 +129,10 @@ def init_db():
             call_type TEXT,
             status TEXT DEFAULT 'completed',
             duration INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            transcript TEXT,
+            summary TEXT,
+            summary_status TEXT DEFAULT 'none'
         );
     """)
     # Safely add preferred_language to Users if it doesn't exist
@@ -145,6 +148,14 @@ def init_db():
         c.execute("ALTER TABLE Matches ADD COLUMN acceptor_confirmed BOOLEAN DEFAULT 0")
         c.execute("ALTER TABLE Matches ADD COLUMN escrow_created_at TIMESTAMP")
         c.execute("ALTER TABLE Matches ADD COLUMN completed_at TIMESTAMP")
+    except:
+        pass # Columns already exist
+
+    # Migrations for call summaries
+    try:
+        c.execute("ALTER TABLE Calls ADD COLUMN transcript TEXT")
+        c.execute("ALTER TABLE Calls ADD COLUMN summary TEXT")
+        c.execute("ALTER TABLE Calls ADD COLUMN summary_status TEXT DEFAULT 'none'")
     except:
         pass # Columns already exist
 
