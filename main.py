@@ -255,7 +255,8 @@ async def send_exchange_request(req: ExchangeRequest, user_id: str = Depends(get
         "INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)",
         (notif_id, req.matched_user_id, f"🤝 {sender_name} wants to exchange skills with you! (Match: {req.compatibility_score}%)")
     )
-    return {"status": "sent", "match_id": match_id}@app.post("/api/exchange/accept/{match_id}")
+    return {"status": "sent", "match_id": match_id}
+@app.post("/api/exchange/accept/{match_id}")
 async def accept_exchange(match_id: str, user_id: str = Depends(get_current_user_id)):
     """Accept an exchange request - holds credits in escrow."""
     match = fetch_query("SELECT * FROM Matches WHERE id = ? AND user2_id = ?", (match_id, user_id))
@@ -644,12 +645,6 @@ async def notification_stream(request: Request):
             await asyncio.sleep(10)
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-
 from fastapi import UploadFile, File
 
 CALLS_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "data", "uploads", "calls")
@@ -662,10 +657,14 @@ async def process_call_summary(call_id: str, is_partial: bool = False):
     try:
         run_query("UPDATE Calls SET summary_status = 'processing' WHERE id = ?", (call_id,))
         
+        call_info = fetch_query("SELECT caller_id FROM Calls WHERE id = ?", (call_id,))
+        caller_id = call_info[0]["caller_id"] if call_info else None
+        
         merged_text = ""
         if call_id in call_transcripts_in_memory:
-            for speaker, text in call_transcripts_in_memory[call_id].items():
-                merged_text += f"[{speaker}]: {text}\n\n"
+            for speaker_id, text in call_transcripts_in_memory[call_id].items():
+                label = "Caller" if speaker_id == caller_id else "Receiver"
+                merged_text += f"[{label}]: {text}\n\n"
                 
         if not merged_text.strip():
             run_query("UPDATE Calls SET summary_status = 'failed' WHERE id = ?", (call_id,))
@@ -678,7 +677,7 @@ async def process_call_summary(call_id: str, is_partial: bool = False):
             
         from langchain_groq import ChatGroq
         from langchain_core.messages import HumanMessage
-        llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_api_key)
+        llm = ChatGroq(model_name="openai/gpt-oss-20b", groq_api_key=groq_api_key)
         
         partial_str = "true" if is_partial else "false"
         prompt = f"""You are an AI assistant analyzing a call transcript between two users.
@@ -730,8 +729,7 @@ async def upload_call_recording(call_id: str, file: UploadFile = File(...), user
     if call_id not in call_transcripts_in_memory:
         call_transcripts_in_memory[call_id] = {}
         
-    speaker_label = "Caller" if call[0]["caller_id"] == user_id else "Receiver"
-    call_transcripts_in_memory[call_id][speaker_label] = transcript_text
+    call_transcripts_in_memory[call_id][user_id] = transcript_text
     
     # Check if both have uploaded
     if len(call_transcripts_in_memory[call_id]) == 2:
@@ -763,3 +761,7 @@ async def get_call_summary(call_id: str, user_id: str = Depends(get_current_user
             summary = {"error": "Invalid JSON"}
             
     return {"summary_status": status, "summary": summary}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
