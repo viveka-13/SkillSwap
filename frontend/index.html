@@ -270,8 +270,22 @@
             <option value="Kannada">🌐 Kannada</option>
             <option value="Malayalam">🌐 Malayalam</option>
           </select>
-          <input type="text" id="regOffered" placeholder="Skills you Offer (comma separated)">
-          <input type="text" id="regNeeded" placeholder="Skills you Need (comma separated)">
+          <div style="display: flex; gap: 10px;">
+            <input type="text" id="regOffered" placeholder="Skills you Offer (comma separated)" style="flex: 1;">
+            <select id="regOfferedLevel" style="width: auto;">
+              <option value="beginner">Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <input type="text" id="regNeeded" placeholder="Skills you Need (comma separated)" style="flex: 1;">
+            <select id="regNeededLevel" style="width: auto;">
+              <option value="beginner">Beginner</option>
+              <option value="intermediate">Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </div>
           <button onclick="register()">Create Account & Embed Skills</button>
         </div>
       </div>
@@ -354,6 +368,10 @@
                 <button class="btn-call" onclick="initiateCall('audio')" title="Audio Call">📞</button>
                 <button class="btn-call" onclick="initiateCall('video')" title="Video Call">🎥</button>
               </div>
+            </div>
+            <!-- Learning Path Section -->
+            <div id="learningPathSection" style="display:none; padding: 12px 16px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, #fefce8, #fffdf7); max-height: 400px; overflow-y: auto;">
+              <div id="learningPathContent"></div>
             </div>
             <div class="chat-messages" id="messagesContainer"></div>
             <div class="chat-input-area" style="position:relative;">
@@ -503,7 +521,9 @@
       lon: parseFloat(document.getElementById('regLon').value || 0),
       bio: "Ready to swap skills.",
       skills_offered: document.getElementById('regOffered').value.split(',').map(s=>s.trim()).filter(Boolean),
+      offered_level: document.getElementById('regOfferedLevel').value,
       skills_needed: document.getElementById('regNeeded').value.split(',').map(s=>s.trim()).filter(Boolean),
+      needed_level: document.getElementById('regNeededLevel').value,
       preferred_language: document.getElementById('regLang').value
     };
     const res = await fetch('/api/auth/register', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
@@ -713,6 +733,110 @@
     fetchMessages();
     clearInterval(chatPollInterval);
     chatPollInterval = setInterval(fetchMessages, 3000);
+    loadLearningPath(matchId);
+  }
+
+  async function loadLearningPath(matchId) {
+    const section = document.getElementById('learningPathSection');
+    const content = document.getElementById('learningPathContent');
+    section.style.display = 'none';
+    content.innerHTML = '';
+    try {
+      const res = await fetch(`/api/matches/${matchId}/learning-path`, { headers: {'Authorization': 'Bearer ' + token} });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.paths && data.paths.length > 0) {
+        renderLearningPaths(data.paths);
+      } else {
+        section.style.display = 'block';
+        content.innerHTML = `
+          <div style="text-align:center; padding: 16px;">
+            <p style="margin-bottom:12px; color:var(--text-muted); font-size:0.9rem;">✨ Generate an AI-powered learning path for this skill exchange!</p>
+            <button id="genPathBtn" onclick="generateLearningPath()" style="width:auto; background: linear-gradient(135deg, var(--primary), var(--primary-light)); color:white; padding: 10px 24px; border-radius: 12px; border:none; cursor:pointer; font-weight:600; font-size:0.95rem;">🧠 Generate Learning Path</button>
+          </div>`;
+      }
+    } catch(e) { console.error('Failed to load learning path:', e); }
+  }
+
+  async function generateLearningPath() {
+    const btn = document.getElementById('genPathBtn');
+    if (btn) { btn.disabled = true; btn.innerText = '⏳ Generating...'; }
+    try {
+      const res = await fetch(`/api/matches/${activeMatchId}/learning-path`, {
+        method: 'POST',
+        headers: {'Authorization': 'Bearer ' + token}
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast('Error: ' + (err.detail || 'Failed to generate'));
+        if (btn) { btn.disabled = false; btn.innerText = '🧠 Generate Learning Path'; }
+        return;
+      }
+      const data = await res.json();
+      if (data.paths && data.paths.length > 0) {
+        renderLearningPaths(data.paths);
+        toast('✅ Learning path generated!');
+      }
+    } catch(e) {
+      console.error(e);
+      toast('Network error generating learning path');
+      if (btn) { btn.disabled = false; btn.innerText = '🧠 Generate Learning Path'; }
+    }
+  }
+
+  function renderLearningPaths(paths) {
+    const section = document.getElementById('learningPathSection');
+    const content = document.getElementById('learningPathContent');
+    section.style.display = 'block';
+
+    const myPath = paths.find(p => p.generated_for_user_id === currentUserId);
+    const theirPath = paths.find(p => p.generated_for_user_id !== currentUserId);
+
+    function renderCard(plan, title, color) {
+      if (!plan) return `<div style="flex:1; padding:12px; color:var(--text-muted); text-align:center;">Not available</div>`;
+      let planData;
+      try { planData = typeof plan.plan_json === 'string' ? JSON.parse(plan.plan_json) : plan.plan_json; } 
+      catch(e) { return `<div style="flex:1; padding:12px; color:var(--danger);">Invalid plan data</div>`; }
+      
+      const sessionsHtml = (planData.sessions || []).map(s => `
+        <div style="padding:10px; margin-bottom:8px; background:white; border-radius:8px; border:1px solid #e5e7eb;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <strong style="font-size:0.88rem;">Session ${s.session_number}: ${s.title}</strong>
+            <span style="font-size:0.75rem; color:var(--text-muted); white-space:nowrap;">⏱ ${s.suggested_duration_minutes} min</span>
+          </div>
+          <ul style="margin:0; padding-left:18px; font-size:0.82rem; color:var(--text-muted);">
+            ${(s.objectives || []).map(o => `<li>${o}</li>`).join('')}
+          </ul>
+        </div>
+      `).join('');
+
+      const milestonesHtml = (planData.milestones || []).map(m => `<span style="display:inline-block; background:#fef3c7; color:#92400e; padding:3px 10px; border-radius:20px; font-size:0.78rem; margin:3px;">🏆 ${m}</span>`).join('');
+
+      return `
+        <div style="flex:1; min-width:280px;">
+          <div style="padding:14px; background:white; border-radius:12px; border:1px solid ${color}; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+            <h4 style="margin:0 0 4px; font-size:0.95rem; color:${color};">${title}</h4>
+            <div style="font-size:0.82rem; color:var(--text-muted); margin-bottom:10px;">
+              Skill: <strong>${planData.skill || plan.skill_name}</strong> · Level: <strong>${planData.learner_level || '?'}</strong> · ${planData.estimated_sessions || '?'} sessions
+            </div>
+            ${sessionsHtml}
+            ${milestonesHtml ? `<div style="margin-top:8px;"><strong style="font-size:0.82rem;">Milestones:</strong><div style="margin-top:4px;">${milestonesHtml}</div></div>` : ''}
+          </div>
+        </div>`;
+    }
+
+    content.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0; font-size:1.05rem;">📚 AI Learning Path</h3>
+        <button onclick="document.getElementById('learningPathSection').style.display='none'" style="background:none; border:none; cursor:pointer; font-size:1.1rem; color:var(--text-muted);" title="Collapse">✕</button>
+      </div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        ${renderCard(myPath, '📖 Your Learning Path', 'var(--primary)')}
+        ${renderCard(theirPath, '🎓 Their Learning Path', 'var(--success)')}
+      </div>
+      <div style="text-align:center; margin-top:8px;">
+        <button onclick="loadLearningPath(activeMatchId)" style="width:auto; background:transparent; color:var(--text-muted); border:1px solid var(--border); padding:4px 12px; font-size:0.78rem; border-radius:6px; cursor:pointer;">🔄 Show Again</button>
+      </div>`;
   }
 
   async function fetchMessages() {

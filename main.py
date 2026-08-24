@@ -136,7 +136,9 @@ class UserRegister(BaseModel):
     lon: float
     bio: str
     skills_offered: list[str]
+    offered_level: str = "beginner"
     skills_needed: list[str]
+    needed_level: str = "beginner"
     preferred_language: str = "English"
 
 class UserLogin(BaseModel):
@@ -196,13 +198,13 @@ async def register(user: UserRegister):
         
         for skill in user.skills_offered:
             skill_id = str(uuid.uuid4())
-            run_query("INSERT INTO Skills (id, user_id, skill_name, type) VALUES (?, ?, ?, 'offered')", (skill_id, user_id, skill))
-            skills_collection.add(documents=[skill], metadatas=[{"user_id": user_id, "type": "offered", "skill_name": skill}], ids=[skill_id])
+            run_query("INSERT INTO Skills (id, user_id, skill_name, type, level) VALUES (?, ?, ?, 'offered', ?)", (skill_id, user_id, skill, user.offered_level))
+            skills_collection.add(documents=[skill], metadatas=[{"user_id": user_id, "type": "offered", "skill_name": skill, "level": user.offered_level}], ids=[skill_id])
             
         for skill in user.skills_needed:
             skill_id = str(uuid.uuid4())
-            run_query("INSERT INTO Skills (id, user_id, skill_name, type) VALUES (?, ?, ?, 'needed')", (skill_id, user_id, skill))
-            skills_collection.add(documents=[skill], metadatas=[{"user_id": user_id, "type": "needed", "skill_name": skill}], ids=[skill_id])
+            run_query("INSERT INTO Skills (id, user_id, skill_name, type, level) VALUES (?, ?, ?, 'needed', ?)", (skill_id, user_id, skill, user.needed_level))
+            skills_collection.add(documents=[skill], metadatas=[{"user_id": user_id, "type": "needed", "skill_name": skill, "level": user.needed_level}], ids=[skill_id])
             
         return {"status": "success", "user_id": user_id}
     except Exception as e:
@@ -761,6 +763,126 @@ async def get_call_summary(call_id: str, user_id: str = Depends(get_current_user
             summary = {"error": "Invalid JSON"}
             
     return {"summary_status": status, "summary": summary}
+
+@app.get("/api/matches/{match_id}/learning-path")
+async def get_learning_path(match_id: str, request: Request):
+    user_id = get_current_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    rows = fetch_query("SELECT * FROM LearningPaths WHERE match_id = ?", (match_id,))
+    if not rows:
+        return {"status": "success", "paths": []}
+    return {"status": "success", "paths": rows}
+
+@app.post("/api/matches/{match_id}/learning-path")
+async def generate_learning_path(match_id: str, request: Request):
+    user_id = get_current_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    match_rows = fetch_query("SELECT * FROM Matches WHERE id = ?", (match_id,))
+    if not match_rows:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    match = match_rows[0]
+    if match['user1_id'] != user_id and match['user2_id'] != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    existing = fetch_query("SELECT id FROM LearningPaths WHERE match_id = ?", (match_id,))
+    if existing:
+        return {"status": "success", "message": "Already generated", "paths": fetch_query("SELECT * FROM LearningPaths WHERE match_id = ?", (match_id,))}
+
+    u1 = match['user1_id']
+    u2 = match['user2_id']
+    
+    u1_skills = fetch_query("SELECT * FROM Skills WHERE user_id = ?", (u1,))
+    u2_skills = fetch_query("SELECT * FROM Skills WHERE user_id = ?", (u2,))
+    
+    u1_offered = [{"name": s['skill_name'], "level": s['level']} for s in u1_skills if s['type'] == 'offered']
+    u1_needed = [{"name": s['skill_name'], "level": s['level']} for s in u1_skills if s['type'] == 'needed']
+    
+    u2_offered = [{"name": s['skill_name'], "level": s['level']} for s in u2_skills if s['type'] == 'offered']
+    u2_needed = [{"name": s['skill_name'], "level": s['level']} for s in u2_skills if s['type'] == 'needed']
+    
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if not groq_api_key:
+        raise HTTPException(status_code=500, detail="LLM configuration missing")
+        
+    from langchain_groq import ChatGroq
+    from langchain_core.messages import HumanMessage
+    
+    try:
+        llm = ChatGroq(model_name="openai/gpt-oss-20b", groq_api_key=groq_api_key)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to init LLM")
+        
+    schema_instructions = '''
+    Return ONLY valid JSON shaped exactly like this, with no markdown formatting or extra text:
+    {
+      "skill": "skill_name",
+      "learner_level": "level",
+      "estimated_sessions": 4,
+      "sessions": [
+        {
+          "session_number": 1,
+          "title": "...",
+          "objectives": ["...", "..."],
+          "suggested_duration_minutes": 45
+        }
+      ],
+      "milestones": ["...", "..."]
+    }
+    '''
+
+    def generate_for_direction(learner_id, teacher_id, learner_needs, teacher_offers, ai_reasoning):
+        prompt = f"""
+        You are an expert curriculum designer. Generate a learning path session plan for a user learning a skill from a peer.
+        The matchmaking reasoning for these users was: {ai_reasoning}
+        The learner wants to learn: {json.dumps(learner_needs)}
+        The teacher can teach: {json.dumps(teacher_offers)}
+        
+        Figure out the best skill for the teacher to teach the learner, and generate a session plan based on the learner's level.
+        
+        {schema_instructions}
+        """
+        try:
+            res = llm.invoke([HumanMessage(content=prompt)])
+            text = res.content.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+            return json.loads(text)
+        except Exception as e:
+            try:
+                res = llm.invoke([HumanMessage(content=prompt + "\n\nFAILED PREVIOUSLY. YOU MUST RETURN ONLY RAW VALID JSON.")])
+                text = res.content.strip()
+                if text.startswith("```json"):
+                    text = text[7:]
+                if text.endswith("```"):
+                    text = text[:-3]
+                text = text.strip()
+                return json.loads(text)
+            except Exception as e2:
+                return None
+                
+    plan_u1_learns_from_u2 = generate_for_direction(u1, u2, u1_needed, u2_offered, match['ai_reasoning'])
+    plan_u2_learns_from_u1 = generate_for_direction(u2, u1, u2_needed, u1_offered, match['ai_reasoning'])
+    
+    if not plan_u1_learns_from_u2 and not plan_u2_learns_from_u1:
+        raise HTTPException(status_code=502, detail="Failed to generate valid learning paths")
+        
+    if plan_u1_learns_from_u2:
+        run_query("INSERT INTO LearningPaths (id, match_id, generated_for_user_id, skill_name, plan_json) VALUES (?, ?, ?, ?, ?)",
+                  (str(uuid.uuid4()), match_id, u1, plan_u1_learns_from_u2.get('skill', 'Unknown'), json.dumps(plan_u1_learns_from_u2)))
+    if plan_u2_learns_from_u1:
+        run_query("INSERT INTO LearningPaths (id, match_id, generated_for_user_id, skill_name, plan_json) VALUES (?, ?, ?, ?, ?)",
+                  (str(uuid.uuid4()), match_id, u2, plan_u2_learns_from_u1.get('skill', 'Unknown'), json.dumps(plan_u2_learns_from_u1)))
+                  
+    paths = fetch_query("SELECT * FROM LearningPaths WHERE match_id = ?", (match_id,))
+    return {"status": "success", "paths": paths}
 
 if __name__ == "__main__":
     import uvicorn

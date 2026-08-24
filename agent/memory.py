@@ -134,12 +134,27 @@ def init_db():
             summary TEXT,
             summary_status TEXT DEFAULT 'none'
         );
+        CREATE TABLE IF NOT EXISTS LearningPaths (
+            id TEXT PRIMARY KEY,
+            match_id TEXT,
+            generated_for_user_id TEXT,
+            skill_name TEXT,
+            plan_json TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (match_id) REFERENCES Matches(id),
+            FOREIGN KEY (generated_for_user_id) REFERENCES Users(id)
+        );
     """)
     # Safely add preferred_language to Users if it doesn't exist
     try:
         c.execute("ALTER TABLE Users ADD COLUMN preferred_language TEXT DEFAULT 'English'")
     except:
         pass  # Column already exists
+        
+    try:
+        c.execute("ALTER TABLE Skills ADD COLUMN level TEXT DEFAULT 'beginner'")
+    except:
+        pass # Column already exists
     
     # Migrations for escrow features
     try:
