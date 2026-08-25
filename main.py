@@ -19,6 +19,14 @@ import bcrypt
 from agent.workflow import run_matchmaking
 from agent.memory import run_query, fetch_query, skills_collection
 
+import logging
+logger = logging.getLogger(__name__)
+
+# Fraud detection imports (lazy to avoid circular imports at module level)
+def _get_fraud_module():
+    from agent.fraud import detect_ghosting_pattern, detect_credit_cycling
+    return detect_ghosting_pattern, detect_credit_cycling
+
 def groq_whisper_transcribe(audio_bytes: bytes, filename: str = 'audio.webm', default_lang: str = 'English') -> tuple[str, str]:
     """
     Transcribes audio using Groq's Whisper API.
@@ -225,6 +233,45 @@ async def get_matches(req: MatchRequest, user_id: str = Depends(get_current_user
     matches = await run_matchmaking(user_id, req.needed_skill, req.offered_skill)
     return {"matches": matches}
 
+# ---------------------------------------------------------------------------
+# Admin API Endpoints
+# ---------------------------------------------------------------------------
+@app.get("/api/admin/fraud-flags")
+async def get_fraud_flags(user_id: str = Depends(get_current_user_id)):
+    """Get all unresolved fraud flags.
+    TODO: Add proper Role-Based Access Control (RBAC).
+    Currently any authenticated user can technically hit this if they know the URL,
+    which is a known gap to be fixed later."""
+    flags = fetch_query(
+        "SELECT f.*, u.name as user_name FROM FraudFlags f JOIN Users u ON f.user_id = u.id WHERE f.resolved_at IS NULL ORDER BY f.created_at DESC"
+    )
+    return {"flags": flags}
+
+@app.post("/api/admin/fraud-flags/{flag_id}/resolve")
+async def resolve_fraud_flag(flag_id: str, user_id: str = Depends(get_current_user_id)):
+    """Resolve a fraud flag and recalculate user status.
+    TODO: Add proper RBAC."""
+    flag = fetch_query("SELECT user_id FROM FraudFlags WHERE id = ?", (flag_id,))
+    if not flag:
+        raise HTTPException(status_code=404, detail="Flag not found")
+        
+    target_user_id = flag[0]["user_id"]
+    now = datetime.utcnow().isoformat()
+    
+    run_query(
+        "UPDATE FraudFlags SET resolved_at = ?, resolved_by = ? WHERE id = ?",
+        (now, user_id, flag_id)
+    )
+    
+    # Recalculate user's overall fraud status
+    try:
+        from agent.fraud import recalculate_user_fraud_status
+        recalculate_user_fraud_status(target_user_id)
+    except Exception:
+        logger.exception("Failed to recalculate fraud status for user %s", target_user_id)
+        
+    return {"status": "resolved"}
+
 @app.get("/api/dashboard")
 async def get_dashboard(user_id: str = Depends(get_current_user_id)):
     rows = fetch_query("SELECT id, name, email, city, lat, lon, bio, trust_score, wallet_balance FROM Users WHERE id = ?", (user_id,))
@@ -240,9 +287,18 @@ async def get_dashboard(user_id: str = Depends(get_current_user_id)):
         "skills_needed": [s["skill_name"] for s in needed]
     }
 
+
 @app.post("/api/exchange/request")
 async def send_exchange_request(req: ExchangeRequest, user_id: str = Depends(get_current_user_id)):
     """Send a skill exchange request to another user."""
+    # Fraud check: restricted users cannot create new exchange requests
+    user_row = fetch_query("SELECT fraud_flag FROM Users WHERE id = ?", (user_id,))
+    if user_row and user_row[0].get("fraud_flag") == "restricted":
+        raise HTTPException(
+            status_code=403,
+            detail="New exchange requests are temporarily restricted because your account has been flagged for repeated incomplete exchanges. Please wait for review."
+        )
+
     match_id = str(uuid.uuid4())
     run_query(
         "INSERT INTO Matches (id, user1_id, user2_id, compatibility_score, ai_reasoning, status) VALUES (?, ?, ?, ?, ?, 'pending')",
@@ -258,6 +314,7 @@ async def send_exchange_request(req: ExchangeRequest, user_id: str = Depends(get
         (notif_id, req.matched_user_id, f"🤝 {sender_name} wants to exchange skills with you! (Match: {req.compatibility_score}%)")
     )
     return {"status": "sent", "match_id": match_id}
+
 @app.post("/api/exchange/accept/{match_id}")
 async def accept_exchange(match_id: str, user_id: str = Depends(get_current_user_id)):
     """Accept an exchange request - holds credits in escrow."""
@@ -322,6 +379,14 @@ async def confirm_exchange(match_id: str, user_id: str = Depends(get_current_use
         run_query("INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)", (str(uuid.uuid4()), match["user1_id"], "🎉 Exchange completed! Credits released."))
         run_query("INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)", (str(uuid.uuid4()), match["user2_id"], f"🎉 Exchange completed! You received {match['credits_held']} credits."))
         
+        # Fraud detection: credit cycling check (non-blocking)
+        try:
+            detect_ghosting, detect_cycling = _get_fraud_module()
+            detect_cycling(match["user1_id"])
+            detect_cycling(match["user2_id"])
+        except Exception:
+            logger.exception("Credit cycling detection failed for match %s", match_id)
+        
         return {"status": "completed", "message": "Exchange completed, credits released."}
     else:
         # Notify the other party
@@ -347,7 +412,7 @@ async def cancel_exchange(match_id: str, user_id: str = Depends(get_current_user
         
     # Refund requester
     run_query("UPDATE Users SET wallet_balance = wallet_balance + ? WHERE id = ?", (match["credits_held"], match["user1_id"]))
-    run_query("UPDATE Matches SET status = 'cancelled', credits_held = 0 WHERE id = ?", (match_id,))
+    run_query("UPDATE Matches SET status = 'cancelled', credits_held = 0, cancelled_by = ? WHERE id = ?", (user_id, match_id))
     
     # Notify both
     canceller = fetch_query("SELECT name FROM Users WHERE id = ?", (user_id,))
@@ -356,12 +421,16 @@ async def cancel_exchange(match_id: str, user_id: str = Depends(get_current_user
     run_query("INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)", (str(uuid.uuid4()), match["user1_id"], f"🚫 {canceller_name} cancelled the exchange. {match['credits_held']} credits refunded."))
     run_query("INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)", (str(uuid.uuid4()), match["user2_id"], f"🚫 {canceller_name} cancelled the exchange."))
     
+    # Fraud detection: ghosting check on the OTHER user (non-blocking)
+    try:
+        detect_ghosting, detect_cycling = _get_fraud_module()
+        other_user_id = match["user2_id"] if user_id == match["user1_id"] else match["user1_id"]
+        detect_ghosting(other_user_id)
+    except Exception:
+        logger.exception("Ghosting detection failed for cancel on match %s", match_id)
+    
     return {"status": "cancelled", "message": "Exchange cancelled, credits refunded."}
 
-@app.get("/api/notifications")
-async def get_notifications(user_id: str = Depends(get_current_user_id)):
-    """Get all notifications for the current user."""
-    notifs = fetch_query("SELECT * FROM Notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20", (user_id,))
     return {"notifications": notifs}
 
 @app.get("/api/exchange/pending")

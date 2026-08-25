@@ -144,6 +144,17 @@ def init_db():
             FOREIGN KEY (match_id) REFERENCES Matches(id),
             FOREIGN KEY (generated_for_user_id) REFERENCES Users(id)
         );
+        CREATE TABLE IF NOT EXISTS FraudFlags (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            flag_type TEXT,
+            detail TEXT,
+            severity TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TIMESTAMP,
+            resolved_by TEXT,
+            FOREIGN KEY (user_id) REFERENCES Users(id)
+        );
     """)
     # Safely add preferred_language to Users if it doesn't exist
     try:
@@ -173,6 +184,24 @@ def init_db():
         c.execute("ALTER TABLE Calls ADD COLUMN summary_status TEXT DEFAULT 'none'")
     except:
         pass # Columns already exist
+
+    # Migrations for fraud detection
+    try:
+        c.execute("ALTER TABLE Users ADD COLUMN fraud_flag TEXT")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE Users ADD COLUMN fraud_flag_reason TEXT")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE Users ADD COLUMN fraud_flagged_at TIMESTAMP")
+    except:
+        pass
+    try:
+        c.execute("ALTER TABLE Matches ADD COLUMN cancelled_by TEXT")
+    except:
+        pass
 
     try:
         conn.commit()

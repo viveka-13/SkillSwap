@@ -299,6 +299,7 @@
       <div class="nav-item active" onclick="switchTab('dashboard', this)">📊 Dashboard</div>
       <div class="nav-item" onclick="switchTab('match', this)">🔍 AI Matchmaking</div>
       <div class="nav-item" onclick="switchTab('chat', this)">💬 Messages</div>
+      <div class="nav-item" onclick="switchTab('admin', this); loadFraudFlags();">🛡️ Admin Panel</div>
       <div class="nav-bottom">
         <div class="nav-item" style="color: var(--danger);" onclick="logout()">🚪 Logout</div>
       </div>
@@ -394,6 +395,22 @@
             <div class="empty-icon">💬</div>
             <h3>Select a conversation</h3>
             <p style="margin-top:8px;">Choose an active exchange to start chatting & sharing files.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADMIN -->
+      <div id="tab-admin" class="tab-content hidden">
+        <h1 style="margin-bottom: 8px;">Admin Control Panel</h1>
+        <p style="color: var(--text-muted); margin-bottom: 24px;">Manage platform integrity and abuse reports.</p>
+        
+        <div class="card pending-card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <p class="section-title" style="margin:0;">🚨 Active Fraud Flags</p>
+            <button onclick="loadFraudFlags()" style="width:auto; padding:6px 12px; font-size:0.85rem;">Refresh</button>
+          </div>
+          <div id="adminFlagsContainer">
+            <p style="color:var(--text-muted);">Loading flags...</p>
           </div>
         </div>
       </div>
@@ -1463,6 +1480,65 @@
       
       checkSummary();
   }
+
+  // --- ADMIN FUNCTIONS ---
+  async function loadFraudFlags() {
+    try {
+      const res = await fetch('/api/admin/fraud-flags', {
+        headers: {'Authorization': 'Bearer ' + token}
+      });
+      if (!res.ok) throw new Error("Failed to fetch flags");
+      const data = await res.json();
+      
+      const container = document.getElementById('adminFlagsContainer');
+      if (data.flags.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding: 20px;">✅ No active fraud flags detected.</p>';
+        return;
+      }
+      
+      container.innerHTML = data.flags.map(f => `
+        <div style="background: white; border: 1px solid ${f.severity === 'restricted' ? 'var(--danger)' : 'var(--primary)'}; border-radius: 8px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <strong style="font-size:1.1rem; color: var(--text);">${f.user_name}</strong>
+                <span style="background:${f.severity === 'restricted' ? '#fee2e2' : '#fef3c7'}; color:${f.severity === 'restricted' ? '#991b1b' : '#92400e'}; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;">${f.severity}</span>
+                <span style="color: var(--text-muted); font-size: 0.85rem;">${f.flag_type}</span>
+              </div>
+              <p style="margin:0 0 12px 0; color: var(--text); font-size:0.9rem; line-height:1.4;">${f.detail}</p>
+              <div style="color: var(--text-muted); font-size: 0.75rem;">Flagged on: ${new Date(f.created_at).toLocaleString()}</div>
+            </div>
+            <button onclick="resolveFraudFlag('${f.id}')" style="background:var(--success); width:auto; padding:8px 16px;">Resolve</button>
+          </div>
+        </div>
+      `).join('');
+      
+    } catch(e) {
+      console.error(e);
+      document.getElementById('adminFlagsContainer').innerHTML = '<p style="color:var(--danger);">Error loading flags. Check console.</p>';
+    }
+  }
+  
+  async function resolveFraudFlag(flagId) {
+    if (!confirm('Resolve this fraud flag?')) return;
+    try {
+      const res = await fetch(`/api/admin/fraud-flags/${flagId}/resolve`, {
+        method: 'POST',
+        headers: {'Authorization': 'Bearer ' + token}
+      });
+      if (res.ok) {
+        toast('Flag resolved successfully');
+        loadFraudFlags();
+      } else {
+        const err = await res.json().catch(()=>({}));
+        toast('Error: ' + (err.detail || 'Failed to resolve'));
+      }
+    } catch(e) {
+      console.error(e);
+      toast('Network error while resolving flag');
+    }
+  }
+
 </script>
 
 </body>
