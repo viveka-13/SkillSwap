@@ -155,6 +155,15 @@ def init_db():
             resolved_by TEXT,
             FOREIGN KEY (user_id) REFERENCES Users(id)
         );
+        CREATE TABLE IF NOT EXISTS SharedNotes (
+            id TEXT PRIMARY KEY,
+            match_id TEXT,
+            content TEXT,
+            last_edited_by TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (match_id) REFERENCES Matches(id),
+            FOREIGN KEY (last_edited_by) REFERENCES Users(id)
+        );
     """)
     # Safely add preferred_language to Users if it doesn't exist
     try:

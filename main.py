@@ -118,6 +118,22 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             data = await websocket.receive_text()
             try:
                 msg = json.loads(data)
+                
+                if msg.get("type") == "notes_update":
+                    match_id = msg.get("match_id")
+                    content = msg.get("content")
+                    q = "SELECT user1_id, user2_id FROM Matches WHERE id = ?"
+                    match = fetch_query(q, (match_id,))
+                    if match and user_id in (match[0]['user1_id'], match[0]['user2_id']):
+                        run_query(
+                            "INSERT INTO SharedNotes (id, match_id, content, last_edited_by, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET content=excluded.content, last_edited_by=excluded.last_edited_by, updated_at=CURRENT_TIMESTAMP",
+                            (match_id, match_id, content, user_id)
+                        )
+                        target_id = match[0]['user2_id'] if match[0]['user1_id'] == user_id else match[0]['user1_id']
+                        msg["sender"] = user_id
+                        await call_manager.send_personal_message(json.dumps(msg), target_id)
+                    continue
+
                 target_id = msg.get("target")
                 if target_id:
                     msg["sender"] = user_id
@@ -952,6 +968,53 @@ async def generate_learning_path(match_id: str, request: Request):
                   
     paths = fetch_query("SELECT * FROM LearningPaths WHERE match_id = ?", (match_id,))
     return {"status": "success", "paths": paths}
+
+@app.get("/api/matches/{match_id}/notes")
+def get_match_notes(match_id: str, current_user_id: str = Depends(get_current_user_id)):
+    q = "SELECT user1_id, user2_id FROM Matches WHERE id = ?"
+    match = fetch_query(q, (match_id,))
+    if not match or current_user_id not in (match[0]["user1_id"], match[0]["user2_id"]):
+        raise HTTPException(status_code=403, detail="Not authorized for this match")
+    
+    notes = fetch_query("SELECT content, last_edited_by, updated_at FROM SharedNotes WHERE match_id = ?", (match_id,))
+    if not notes:
+        return {"content": "", "last_edited_by": None, "updated_at": None}
+    return notes[0]
+
+class NoteUpdate(BaseModel):
+    content: str
+
+@app.post("/api/matches/{match_id}/notes")
+def update_match_notes(match_id: str, req: NoteUpdate, current_user_id: str = Depends(get_current_user_id)):
+    user_id = current_user_id
+    q = "SELECT user1_id, user2_id FROM Matches WHERE id = ?"
+    match = fetch_query(q, (match_id,))
+    if not match or user_id not in (match[0]["user1_id"], match[0]["user2_id"]):
+        raise HTTPException(status_code=403, detail="Not authorized for this match")
+    
+    run_query(
+        "INSERT INTO SharedNotes (id, match_id, content, last_edited_by, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET content=excluded.content, last_edited_by=excluded.last_edited_by, updated_at=CURRENT_TIMESTAMP",
+        (match_id, match_id, req.content, user_id)
+    )
+    return {"status": "ok"}
+
+@app.get("/api/webrtc/ice-config")
+def get_ice_config(current_user_id: str = Depends(get_current_user_id)):
+    stun_url = os.getenv("STUN_URL", "stun:stun.l.google.com:19302")
+    ice_servers = [{"urls": stun_url}]
+    
+    turn_url = os.getenv("TURN_URL")
+    turn_user = os.getenv("TURN_USERNAME")
+    turn_pass = os.getenv("TURN_CREDENTIAL")
+    
+    if turn_url and turn_user and turn_pass:
+        ice_servers.append({
+            "urls": turn_url,
+            "username": turn_user,
+            "credential": turn_pass
+        })
+        
+    return {"iceServers": ice_servers}
 
 if __name__ == "__main__":
     import uvicorn

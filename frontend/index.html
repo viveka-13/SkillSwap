@@ -366,10 +366,13 @@
             <div class="chat-header" style="display:flex; justify-content:space-between; align-items:center;">
               <div><span style="font-size:1.3rem;">💬</span> Chat with <span id="chatPartnerName" style="color: var(--primary);">User</span></div>
               <div style="display:flex; gap: 8px;">
+                <button class="btn-call" onclick="toggleNotesPanel()" title="Shared Notes">📝</button>
                 <button class="btn-call" onclick="initiateCall('audio')" title="Audio Call">📞</button>
                 <button class="btn-call" onclick="initiateCall('video')" title="Video Call">🎥</button>
               </div>
             </div>
+            <div style="display:flex; flex:1; overflow:hidden;">
+              <div style="flex:1; display:flex; flex-direction:column; min-width:300px;">
             <!-- Learning Path Section -->
             <div id="learningPathSection" style="display:none; padding: 12px 16px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, #fefce8, #fffdf7); max-height: 400px; overflow-y: auto;">
               <div id="learningPathContent"></div>
@@ -389,6 +392,17 @@
               <input type="text" id="chatInput" placeholder="Type a message..." onkeypress="if(event.key === 'Enter') sendMessage()">
               <button onclick="sendMessage()" style="padding: 12px 20px;">Send</button>
               <button class="btn-mic" id="micBtn" onpointerdown="startRecording()" title="Hold to record voice">🎤</button>
+            </div>
+            </div>
+            <!-- Notes Panel -->
+            <div id="notesPanel" style="display:none; width: 300px; border-left: 1px solid var(--border); background: var(--surface); flex-direction:column;">
+              <div style="padding: 12px; border-bottom: 1px solid var(--border); font-weight: bold; display:flex; justify-content:space-between; align-items:center;">
+                <span>📝 Shared Notes</span>
+                <button onclick="toggleNotesPanel()" style="background:transparent; color:var(--text); padding:4px;">✕</button>
+              </div>
+              <textarea id="sharedNotesArea" onkeyup="handleNotesKeyup()" style="flex:1; border:none; resize:none; padding:12px; width:100%; box-sizing:border-box; outline:none; font-family:inherit; background:transparent;" placeholder="Type notes here... they sync in real-time."></textarea>
+              <div id="notesStatus" style="padding: 8px 12px; font-size: 0.75rem; color: var(--text-muted); border-top: 1px solid var(--border); min-height: 20px;"></div>
+            </div>
             </div>
           </div>
           <div id="chatEmptyState" class="chat-empty">
@@ -443,6 +457,7 @@
       <button class="btn-call-control" id="btnToggleMic" onclick="toggleMic()" style="background:#444; border-radius:50%; width:64px; height:64px;">🎙️</button>
       <button class="btn-call-control" id="btnToggleCam" onclick="toggleCam()" style="background:#444; border-radius:50%; width:64px; height:64px; display:none;">📹</button>
       <button class="btn-call-control" id="btnSwitchCam" onclick="switchCam()" style="background:#444; border-radius:50%; width:64px; height:64px; display:none;">🔄</button>
+      <button class="btn-call-control" id="btnShareScreen" onclick="toggleScreenShare()" style="background:#444; border-radius:50%; width:64px; height:64px; display:none;" title="Share Screen">🖥️</button>
       <button class="btn-call-control" onclick="endCall()" style="background:var(--danger); border-radius:50%; width:64px; height:64px;">❌</button>
     </div>
   </div>
@@ -565,12 +580,12 @@
     else alert("Login failed. Please check your credentials.");
   }
 
-  // ========== DASHBOARD ==========
   async function loadDashboard() {
     const res = await fetch('/api/dashboard', { headers: {'Authorization': 'Bearer ' + token} });
     if (!res.ok) return logout();
     const data = await res.json();
     currentUserId = data.user.id;
+    await loadIceConfig();
     initWebSocket();
     document.getElementById('dashWelcome').innerText = `Welcome back, ${data.user.name}!`;
     document.getElementById('dashTrust').innerText = data.user.trust_score || 0;
@@ -751,6 +766,7 @@
     clearInterval(chatPollInterval);
     chatPollInterval = setInterval(fetchMessages, 3000);
     loadLearningPath(matchId);
+    loadNotes(matchId);
   }
 
   async function loadLearningPath(matchId) {
@@ -1156,7 +1172,19 @@
   let callTimerInterval = null;
   let callStartTime = 0;
   
-  const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  let configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  let screenStream = null;
+  let isScreenSharing = false;
+
+  async function loadIceConfig() {
+    try {
+      const res = await fetch('/api/webrtc/ice-config', { headers: {'Authorization': 'Bearer ' + token} });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.iceServers) configuration.iceServers = data.iceServers;
+      }
+    } catch(e) { console.warn("Failed to load ICE config, using STUN default."); }
+  }
 
   function initWebSocket() {
     if (!token || ws) return;
@@ -1218,6 +1246,16 @@
       case 'call_end':
         toast("Call ended.");
         cleanupCall(false, 'completed');
+        break;
+        
+      case 'notes_update':
+        if (data.match_id === activeMatchId) {
+          const now = Date.now();
+          if (now - lastLocalNoteEdit > 1500) {
+            document.getElementById('sharedNotesArea').value = data.content;
+            document.getElementById('notesStatus').innerText = `Last edited by ${currentCallPartner || 'partner'} (Live)`;
+          }
+        }
         break;
     }
   }
@@ -1343,6 +1381,7 @@
     const type = currentCallType;
     const callUuid = savedCallUuid;
     
+    if (isScreenSharing) stopScreenShare();
     if (peerConnection) { peerConnection.close(); peerConnection = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     
@@ -1378,10 +1417,12 @@
       document.getElementById('localVideo').srcObject = localStream;
       document.getElementById('btnToggleCam').style.display = 'block';
       document.getElementById('btnSwitchCam').style.display = 'block';
+      document.getElementById('btnShareScreen').style.display = 'block';
     } else {
       document.getElementById('localVideo').style.display = 'none';
       document.getElementById('btnToggleCam').style.display = 'none';
       document.getElementById('btnSwitchCam').style.display = 'none';
+      document.getElementById('btnShareScreen').style.display = 'none';
     }
     
     startCallTimer();
@@ -1433,6 +1474,106 @@
 
   function switchCam() {
     toast("Camera switch requires mobile facingMode mapping, omitted for demo.");
+  }
+
+  async function toggleScreenShare() {
+    if (!peerConnection || currentCallType !== 'video') return;
+
+    if (isScreenSharing) {
+      stopScreenShare();
+    } else {
+      try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        const screenTrack = screenStream.getVideoTracks()[0];
+        
+        const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+          sender.replaceTrack(screenTrack);
+        }
+        
+        document.getElementById('localVideo').srcObject = screenStream;
+        document.getElementById('btnShareScreen').style.background = 'var(--primary)';
+        isScreenSharing = true;
+
+        screenTrack.onended = () => {
+          stopScreenShare();
+        };
+      } catch (err) {
+        console.error("Error sharing screen:", err);
+        toast("Screen sharing cancelled or failed.");
+      }
+    }
+  }
+
+  function stopScreenShare() {
+    if (!isScreenSharing || !peerConnection) return;
+    
+    if (screenStream) {
+      screenStream.getTracks().forEach(t => t.stop());
+      screenStream = null;
+    }
+    
+    const cameraTrack = localStream ? localStream.getVideoTracks()[0] : null;
+    const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+    
+    if (sender && cameraTrack) {
+      sender.replaceTrack(cameraTrack);
+    }
+    
+    document.getElementById('localVideo').srcObject = localStream;
+    document.getElementById('btnShareScreen').style.background = '#444';
+    isScreenSharing = false;
+  }
+
+  // ========== SHARED NOTES ==========
+  let notesDebounceTimer = null;
+  let lastLocalNoteEdit = 0;
+  let isNotesPanelOpen = false;
+
+  function toggleNotesPanel() {
+    isNotesPanelOpen = !isNotesPanelOpen;
+    document.getElementById('notesPanel').style.display = isNotesPanelOpen ? 'flex' : 'none';
+  }
+
+  async function loadNotes(matchId) {
+    const area = document.getElementById('sharedNotesArea');
+    const status = document.getElementById('notesStatus');
+    area.value = '';
+    status.innerText = 'Loading...';
+    try {
+      const res = await fetch(`/api/matches/${matchId}/notes`, { headers: {'Authorization': 'Bearer ' + token} });
+      if (res.ok) {
+        const data = await res.json();
+        area.value = data.content || '';
+        status.innerText = data.last_edited_by ? `Last edited by ${data.last_edited_by === currentUserId ? 'you' : 'partner'} at ${new Date(data.updated_at).toLocaleString()}` : '';
+      } else {
+        status.innerText = 'Failed to load notes.';
+      }
+    } catch(e) { status.innerText = 'Error loading notes.'; }
+  }
+
+  function handleNotesKeyup() {
+    lastLocalNoteEdit = Date.now();
+    document.getElementById('notesStatus').innerText = 'Saving...';
+    clearTimeout(notesDebounceTimer);
+    
+    notesDebounceTimer = setTimeout(async () => {
+      const content = document.getElementById('sharedNotesArea').value;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'notes_update', match_id: activeMatchId, content: content }));
+        document.getElementById('notesStatus').innerText = 'Saved (Live Sync)';
+      } else {
+        // Fallback REST POST
+        try {
+          await fetch(`/api/matches/${activeMatchId}/notes`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+            body: JSON.stringify({ content: content })
+          });
+          document.getElementById('notesStatus').innerText = 'Saved (REST)';
+        } catch(e) { document.getElementById('notesStatus').innerText = 'Save failed.'; }
+      }
+    }, 1000);
   }
 
   window.pollCallSummary = async function(callId, btnEl) {
