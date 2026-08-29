@@ -224,7 +224,88 @@
     .btn-call:hover { background: var(--primary); color: white; transform: scale(1.1); }
     .btn-call-control { transition: all 0.2s; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; color: white; border: none; cursor: pointer; }
     .btn-call-control:hover { filter: brightness(1.2); transform: scale(1.05); }
-  </style>
+
+    /* --- Guided Skill Entry --- */
+    .skill-section { margin-bottom: 8px; }
+    .skill-suggestion-card {
+      background: var(--yellow-soft);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 8px;
+      animation: slideDown 0.25s ease-out;
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .skill-suggestion-card select,
+    .skill-suggestion-card textarea {
+      width: 100%;
+      margin-top: 6px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+      background: #fff;
+    }
+    .suggestion-header {
+      font-size: 11px;
+      color: var(--primary);
+      font-weight: 600;
+      margin-bottom: 6px;
+      letter-spacing: 0.3px;
+    }
+    .clarify-question {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-style: italic;
+      margin-bottom: 8px;
+      padding: 6px 10px;
+      background: rgba(218,165,32,0.08);
+      border-radius: 6px;
+    }
+    .skill-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .skill-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, var(--primary-light), var(--primary));
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .skill-tag .remove-skill {
+      cursor: pointer;
+      font-size: 14px;
+      opacity: 0.8;
+      transition: opacity 0.15s;
+    }
+    .skill-tag .remove-skill:hover { opacity: 1; }
+    .skill-suggestion-card .loading-dots::after {
+      content: '';
+      animation: dots 1.2s steps(4, end) infinite;
+    }
+    @keyframes dots {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+    </style>
 </head>
 <body>
 
@@ -270,23 +351,79 @@
             <option value="Kannada">🌐 Kannada</option>
             <option value="Malayalam">🌐 Malayalam</option>
           </select>
-          <div style="display: flex; gap: 10px;">
-            <input type="text" id="regOffered" placeholder="Skills you Offer (comma separated)" style="flex: 1;">
-            <select id="regOfferedLevel" style="width: auto;">
-              <option value="beginner">Beginner</option>
-              <option value="intermediate">Intermediate</option>
-              <option value="advanced">Advanced</option>
-            </select>
+                    <!-- Guided Skill Entry: Skills You Offer -->
+          <div class="skill-section">
+            <label style="font-weight:600; color:var(--primary); margin-bottom:6px; display:block;">Skills You Offer</label>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <input type="text" id="offeredSkillInput" placeholder="Type a skill name (e.g. Python, Guitar)" style="flex:1;">
+              <button type="button" onclick="addSkillEntry('offered')" style="white-space:nowrap; padding:8px 16px; font-size:13px;">+ Add</button>
+            </div>
+            <!-- AI suggestion card (hidden by default) -->
+            <div id="offeredSuggestionCard" class="skill-suggestion-card hidden">
+              <div class="suggestion-header">&#10024; AI suggestion — edit as needed</div>
+              <div id="offeredClarifyQ" class="clarify-question hidden"></div>
+              <select id="offeredSugCategory">
+                <option value="">Category...</option>
+                <option value="Programming">Programming</option>
+                <option value="Design">Design</option>
+                <option value="Music">Music</option>
+                <option value="Languages">Languages</option>
+                <option value="Cooking">Cooking</option>
+                <option value="Fitness">Fitness</option>
+                <option value="Business">Business</option>
+                <option value="Science">Science</option>
+                <option value="Writing">Writing</option>
+                <option value="Photography">Photography</option>
+                <option value="Other">Other</option>
+              </select>
+              <textarea id="offeredSugDescription" placeholder="Describe what you can teach (1-2 sentences)" rows="2" style="resize:vertical;"></textarea>
+              <select id="offeredSugLevel">
+                <option value="beginner">Beginner</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="advanced">Advanced</option>
+              </select>
+              <button type="button" onclick="confirmSkill('offered')" style="background:var(--success); color:#fff; margin-top:4px;">Confirm Skill</button>
+            </div>
+            <div id="offeredSkillTags" class="skill-tags"></div>
           </div>
-          <div style="display: flex; gap: 10px;">
-            <input type="text" id="regNeeded" placeholder="Skills you Need (comma separated)" style="flex: 1;">
-            <select id="regNeededLevel" style="width: auto;">
-              <option value="beginner">Beginner</option>
-              <option value="intermediate">Intermediate</option>
-              <option value="advanced">Advanced</option>
-            </select>
+
+          <!-- Guided Skill Entry: Skills You Need -->
+          <div class="skill-section" style="margin-top:12px;">
+            <label style="font-weight:600; color:var(--primary); margin-bottom:6px; display:block;">Skills You Need</label>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <input type="text" id="neededSkillInput" placeholder="Type a skill name (e.g. Cooking, Spanish)" style="flex:1;">
+              <button type="button" onclick="addSkillEntry('needed')" style="white-space:nowrap; padding:8px 16px; font-size:13px;">+ Add</button>
+            </div>
+            <!-- AI suggestion card (hidden by default) -->
+            <div id="neededSuggestionCard" class="skill-suggestion-card hidden">
+              <div class="suggestion-header">&#10024; AI suggestion — edit as needed</div>
+              <div id="neededClarifyQ" class="clarify-question hidden"></div>
+              <select id="neededSugCategory">
+                <option value="">Category...</option>
+                <option value="Programming">Programming</option>
+                <option value="Design">Design</option>
+                <option value="Music">Music</option>
+                <option value="Languages">Languages</option>
+                <option value="Cooking">Cooking</option>
+                <option value="Fitness">Fitness</option>
+                <option value="Business">Business</option>
+                <option value="Science">Science</option>
+                <option value="Writing">Writing</option>
+                <option value="Photography">Photography</option>
+                <option value="Other">Other</option>
+              </select>
+              <textarea id="neededSugDescription" placeholder="Describe what you want to learn (1-2 sentences)" rows="2" style="resize:vertical;"></textarea>
+              <select id="neededSugLevel">
+                <option value="beginner">Beginner</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="advanced">Advanced</option>
+              </select>
+              <button type="button" onclick="confirmSkill('needed')" style="background:var(--success); color:#fff; margin-top:4px;">Confirm Skill</button>
+            </div>
+            <div id="neededSkillTags" class="skill-tags"></div>
           </div>
-          <button onclick="register()">Create Account & Embed Skills</button>
+
+          <button onclick="register()" style="margin-top:12px;">Create Account & Embed Skills</button>
         </div>
       </div>
     </div>
@@ -539,11 +676,107 @@
   }
 
   // ========== AUTH ==========
+  // --- Guided Skill Entry State ---
+  const confirmedSkills = { offered: [], needed: [] };
+  let pendingSkillName = { offered: '', needed: '' };
+
+  async function addSkillEntry(type) {
+    const inputId = type === 'offered' ? 'offeredSkillInput' : 'neededSkillInput';
+    const skillName = document.getElementById(inputId).value.trim();
+    if (!skillName) return;
+
+    pendingSkillName[type] = skillName;
+    const cardId = type === 'offered' ? 'offeredSuggestionCard' : 'neededSuggestionCard';
+    const card = document.getElementById(cardId);
+    card.classList.remove('hidden');
+
+    // Reset fields
+    document.getElementById(type + 'SugCategory').value = '';
+    document.getElementById(type + 'SugDescription').value = '';
+    document.getElementById(type + 'SugLevel').value = 'beginner';
+    const clarifyEl = document.getElementById(type + 'ClarifyQ');
+    clarifyEl.classList.add('hidden');
+    clarifyEl.textContent = '';
+
+    // Call AI suggestion (non-blocking)
+    try {
+      const res = await fetch('/api/skills/structure-suggestion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill_name: skillName, type: type })
+      });
+      if (res.ok) {
+        const suggestion = await res.json();
+        if (suggestion.suggested_category) {
+          document.getElementById(type + 'SugCategory').value = suggestion.suggested_category;
+        }
+        if (suggestion.suggested_description) {
+          document.getElementById(type + 'SugDescription').value = suggestion.suggested_description;
+        }
+        if (suggestion.clarifying_question) {
+          clarifyEl.textContent = suggestion.clarifying_question;
+          clarifyEl.classList.remove('hidden');
+        }
+      }
+    } catch (e) {
+      console.log('AI suggestion unavailable, manual entry still works:', e);
+    }
+  }
+
+  function confirmSkill(type) {
+    const skillName = pendingSkillName[type];
+    if (!skillName) return;
+
+    const category = document.getElementById(type + 'SugCategory').value || null;
+    const description = document.getElementById(type + 'SugDescription').value.trim() || null;
+    const level = document.getElementById(type + 'SugLevel').value;
+
+    confirmedSkills[type].push({ skill_name: skillName, description, level, category });
+
+    // Render tag
+    const tagsEl = document.getElementById(type + 'SkillTags');
+    const idx = confirmedSkills[type].length - 1;
+    const tag = document.createElement('span');
+    tag.className = 'skill-tag';
+    tag.innerHTML = skillName + ' <span class="remove-skill" onclick="removeSkill(\'' + type + '\',' + idx + ')">&#10005;</span>';
+    tag.title = (category ? '[' + category + '] ' : '') + (description || '') + ' (' + level + ')';
+    tagsEl.appendChild(tag);
+
+    // Reset
+    const inputId = type === 'offered' ? 'offeredSkillInput' : 'neededSkillInput';
+    document.getElementById(inputId).value = '';
+    document.getElementById(type + 'SuggestionCard').classList.add('hidden');
+    // Fix: card IDs use different casing
+    const cardId = type === 'offered' ? 'offeredSuggestionCard' : 'neededSuggestionCard';
+    document.getElementById(cardId).classList.add('hidden');
+    pendingSkillName[type] = '';
+  }
+
+  function removeSkill(type, idx) {
+    confirmedSkills[type].splice(idx, 1);
+    renderSkillTags(type);
+  }
+
+  function renderSkillTags(type) {
+    const tagsEl = document.getElementById(type + 'SkillTags');
+    tagsEl.innerHTML = '';
+    confirmedSkills[type].forEach((s, i) => {
+      const tag = document.createElement('span');
+      tag.className = 'skill-tag';
+      tag.innerHTML = s.skill_name + ' <span class="remove-skill" onclick="removeSkill(\'' + type + '\',' + i + ')">&#10005;</span>';
+      tag.title = (s.category ? '[' + s.category + '] ' : '') + (s.description || '') + ' (' + s.level + ')';
+      tagsEl.appendChild(tag);
+    });
+  }
+
   async function register() {
     const emailStr = document.getElementById('regEmail').value.trim();
     const pwdStr = document.getElementById('regPwd').value;
     if (!emailStr || !pwdStr) { alert("Email and password are required."); return; }
-    
+    if (confirmedSkills.offered.length === 0 && confirmedSkills.needed.length === 0) {
+      alert("Please add at least one skill you offer or need."); return;
+    }
+
     const data = {
       name: document.getElementById('regName').value.trim(),
       email: emailStr,
@@ -552,16 +785,18 @@
       lat: parseFloat(document.getElementById('regLat').value || 0),
       lon: parseFloat(document.getElementById('regLon').value || 0),
       bio: "Ready to swap skills.",
-      skills_offered: document.getElementById('regOffered').value.split(',').map(s=>s.trim()).filter(Boolean),
-      offered_level: document.getElementById('regOfferedLevel').value,
-      skills_needed: document.getElementById('regNeeded').value.split(',').map(s=>s.trim()).filter(Boolean),
-      needed_level: document.getElementById('regNeededLevel').value,
+      skills_offered: confirmedSkills.offered,
+      offered_level: confirmedSkills.offered[0]?.level || "beginner",
+      skills_needed: confirmedSkills.needed,
+      needed_level: confirmedSkills.needed[0]?.level || "beginner",
       preferred_language: document.getElementById('regLang').value
     };
     const res = await fetch('/api/auth/register', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
     if (res.ok) { 
-      toast("✅ Account created! Please sign in."); 
+      toast("Account created! Please sign in."); 
       document.getElementById('loginEmail').value = emailStr;
+      confirmedSkills.offered = [];
+      confirmedSkills.needed = [];
       toggleAuth('login'); 
     }
     else { const err = await res.json(); alert("Registration failed: " + err.detail); }

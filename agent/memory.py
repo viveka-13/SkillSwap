@@ -175,6 +175,16 @@ def init_db():
         c.execute("ALTER TABLE Skills ADD COLUMN level TEXT DEFAULT 'beginner'")
     except:
         pass # Column already exists
+
+    # Migrations for guided skill entry (description + category)
+    try:
+        c.execute("ALTER TABLE Skills ADD COLUMN description TEXT")
+    except:
+        pass  # Column already exists
+    try:
+        c.execute("ALTER TABLE Skills ADD COLUMN category TEXT")
+    except:
+        pass  # Column already exists
     
     # Migrations for escrow features
     try:

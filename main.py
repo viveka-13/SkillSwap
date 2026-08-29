@@ -151,6 +151,16 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
+class SkillEntry(BaseModel):
+    skill_name: str
+    description: str | None = None
+    level: str = "beginner"
+    category: str | None = None
+
+class StructureSuggestionRequest(BaseModel):
+    skill_name: str
+    type: str = "offered"  # 'offered' or 'needed'
+
 class UserRegister(BaseModel):
     name: str
     email: str
@@ -159,9 +169,9 @@ class UserRegister(BaseModel):
     lat: float
     lon: float
     bio: str
-    skills_offered: list[str]
+    skills_offered: list  # list[SkillEntry] or list[str] for backward compat
     offered_level: str = "beginner"
-    skills_needed: list[str]
+    skills_needed: list   # list[SkillEntry] or list[str] for backward compat
     needed_level: str = "beginner"
     preferred_language: str = "English"
 
@@ -220,19 +230,93 @@ async def register(user: UserRegister):
             (user_id, user.name, email, hashed_pwd, user.city, user.lat, user.lon, user.bio, user.preferred_language)
         )
         
-        for skill in user.skills_offered:
+        # --- Guided Skill Entry: save structured skill data ---
+        def _normalize_skill(raw, fallback_level):
+            """Accept either a dict/SkillEntry or a plain string for backward compat."""
+            if isinstance(raw, dict):
+                return {
+                    "skill_name": raw.get("skill_name", ""),
+                    "description": raw.get("description") or None,
+                    "level": raw.get("level", fallback_level),
+                    "category": raw.get("category") or None,
+                }
+            # Plain string (old format)
+            return {"skill_name": str(raw), "description": None, "level": fallback_level, "category": None}
+
+        def _embed_text(skill_name, description):
+            """Build the text to embed into ChromaDB — richer than skill_name alone."""
+            if description:
+                return f"{skill_name}: {description}"
+            return skill_name
+
+        for raw_skill in user.skills_offered:
+            s = _normalize_skill(raw_skill, user.offered_level)
             skill_id = str(uuid.uuid4())
-            run_query("INSERT INTO Skills (id, user_id, skill_name, type, level) VALUES (?, ?, ?, 'offered', ?)", (skill_id, user_id, skill, user.offered_level))
-            skills_collection.add(documents=[skill], metadatas=[{"user_id": user_id, "type": "offered", "skill_name": skill, "level": user.offered_level}], ids=[skill_id])
-            
-        for skill in user.skills_needed:
+            run_query(
+                "INSERT INTO Skills (id, user_id, skill_name, type, level, description, category) VALUES (?, ?, ?, 'offered', ?, ?, ?)",
+                (skill_id, user_id, s["skill_name"], s["level"], s["description"], s["category"])
+            )
+            embed_doc = _embed_text(s["skill_name"], s["description"])
+            meta = {"user_id": user_id, "type": "offered", "skill_name": s["skill_name"], "level": s["level"]}
+            if s["category"]:
+                meta["category"] = s["category"]
+            skills_collection.add(documents=[embed_doc], metadatas=[meta], ids=[skill_id])
+
+        for raw_skill in user.skills_needed:
+            s = _normalize_skill(raw_skill, user.needed_level)
             skill_id = str(uuid.uuid4())
-            run_query("INSERT INTO Skills (id, user_id, skill_name, type, level) VALUES (?, ?, ?, 'needed', ?)", (skill_id, user_id, skill, user.needed_level))
-            skills_collection.add(documents=[skill], metadatas=[{"user_id": user_id, "type": "needed", "skill_name": skill, "level": user.needed_level}], ids=[skill_id])
+            run_query(
+                "INSERT INTO Skills (id, user_id, skill_name, type, level, description, category) VALUES (?, ?, ?, 'needed', ?, ?, ?)",
+                (skill_id, user_id, s["skill_name"], s["level"], s["description"], s["category"])
+            )
+            embed_doc = _embed_text(s["skill_name"], s["description"])
+            meta = {"user_id": user_id, "type": "needed", "skill_name": s["skill_name"], "level": s["level"]}
+            if s["category"]:
+                meta["category"] = s["category"]
+            skills_collection.add(documents=[embed_doc], metadatas=[meta], ids=[skill_id])
             
         return {"status": "success", "user_id": user_id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/skills/structure-suggestion")
+async def skill_structure_suggestion(req: StructureSuggestionRequest):
+    """AI-assisted skill structuring: suggests category, description, and clarifying question."""
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if not groq_api_key:
+        return {"suggested_category": None, "suggested_description": None, "clarifying_question": None}
+
+    try:
+        from langchain_groq import ChatGroq
+        llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_api_key)
+
+        skill_type_label = "teach/offer" if req.type == "offered" else "learn/need"
+        prompt = f"""You are a skill-matching assistant. A user wants to {skill_type_label} the skill: "{req.skill_name}".
+
+Return ONLY valid JSON (no markdown, no explanation) with exactly these keys:
+{{
+  "suggested_category": "one of: Programming, Design, Music, Languages, Cooking, Fitness, Business, Science, Writing, Photography, Other",
+  "suggested_description": "a natural 1-2 sentence elaboration the user can edit, e.g. 'I can teach {req.skill_name}, focused on ___'",
+  "clarifying_question": "a short optional question to help the user be more specific, or null if the skill name is already specific enough"
+}}"""
+
+        response = llm.invoke(prompt)
+        import json as json_mod
+        # Try to parse JSON from the response
+        text = response.content.strip()
+        # Handle potential markdown code blocks
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        result = json_mod.loads(text)
+        return {
+            "suggested_category": result.get("suggested_category"),
+            "suggested_description": result.get("suggested_description"),
+            "clarifying_question": result.get("clarifying_question"),
+        }
+    except Exception as e:
+        print(f"Skill suggestion failed (graceful fallback): {e}")
+        return {"suggested_category": None, "suggested_description": None, "clarifying_question": None}
 
 @app.post("/api/auth/login")
 async def login(creds: UserLogin):
