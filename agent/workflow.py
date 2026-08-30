@@ -125,7 +125,7 @@ def compatibility_scoring(state: MatchState) -> MatchState:
         User 2 ({u['name']}) is a potential match who can teach User 1: {they_teach_str} and needs help with: {i_help_str}.
         Distance: {u['distance']:.1f}km. Trust Score: {u['trust_score']}.
         
-        Calculate a compatibility score (0-100) and provide a 1-sentence reasoning emphasizing the mutual skill exchange.
+        Calculate a compatibility score (0-100) and provide a 1-sentence reasoning. Phrase the reasoning as a direct, second-person, headline-style insight (e.g., "You'd learn backend Python from someone who also wants your UI design skills — a strong two-way fit.").
         Format strictly as:
         Score: 95
         Reason: ...
@@ -144,9 +144,11 @@ def compatibility_scoring(state: MatchState) -> MatchState:
             
             u["compatibility_score"] = score
             u["ai_reasoning"] = reason
-        except:
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
             u["compatibility_score"] = 50
-            u["ai_reasoning"] = "Fallback scoring."
+            u["ai_reasoning"] = "Fallback scoring." 
             
         scored.append(u)
         

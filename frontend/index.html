@@ -930,33 +930,40 @@
       json.matches.forEach(m => {
         const div = document.createElement('div'); div.className = "card";
         const sr = (m.ai_reasoning||'').replace(/'/g,"\\'").replace(/"/g,"&quot;");
-        div.innerHTML = `
+                div.innerHTML = `
+          <!-- AI Match Insight (Primary Element) -->
+          <div style="margin-bottom:16px; padding-bottom:16px; border-bottom: 1px solid var(--border);">
+            <div style="font-size: 0.8rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">&#10024; AI Match Insight</div>
+            <div style="font-size: 1.25rem; font-weight: 600; color: var(--text); line-height: 1.4;">${m.ai_reasoning}</div>
+          </div>
+
+          <!-- Profile Metadata (Secondary Element) -->
           <div class="flex justify-between items-center" style="margin-bottom:12px;">
             <div>
-              <h3 style="margin:0; font-size:1.2rem;">${m.name} <span style="font-size:0.85rem; color:var(--text-muted); font-weight:400;">(${m.city})</span></h3>
-              <p style="margin:4px 0 0; font-size:0.88rem; color:var(--text-muted);">📍 ${m.distance.toFixed(1)} km &nbsp;|&nbsp; ⭐ Trust: ${m.trust_score}/5</p>
+              <h3 style="margin:0; font-size:1.1rem; color: var(--text-muted);">${m.name} <span style="font-size:0.85rem; font-weight:400;">(${m.city})</span></h3>
+              <p style="margin:4px 0 0; font-size:0.85rem; color:var(--text-muted);">&#128205; ${m.distance.toFixed(1)} km &nbsp;|&nbsp; &#128302; Trust: ${m.trust_score}/5</p>
             </div>
-            <div class="match-score">${m.compatibility_score}%</div>
+            <div class="match-score" style="font-size: 1.1rem; padding: 4px 10px;">${m.compatibility_score}%</div>
           </div>
           
-          <div style="display:flex; gap: 16px; margin-bottom: 12px; font-size: 0.9rem;">
-            <div style="flex:1; background: #f8f9fa; padding: 12px; border-radius: 8px;">
+          <!-- Skill Breakdown (Secondary Element) -->
+          <div style="display:flex; gap: 16px; margin-bottom: 12px; font-size: 0.85rem;">
+            <div style="flex:1; background: #f8f9fa; padding: 10px; border-radius: 8px;">
               <strong style="color:var(--text);">They can teach you:</strong>
               <ul style="margin: 4px 0 0; padding-left: 0; color:var(--text-muted); list-style:none;">
-                ${(m.skills_they_can_teach || []).map(s => `<li>✓ ${s}</li>`).join('')}
+                ${(m.skills_they_can_teach || []).map(s => `<li>&#10003; ${s}</li>`).join('')}
               </ul>
             </div>
-            <div style="flex:1; background: #f0fdf4; padding: 12px; border-radius: 8px; border: 1px solid #dcfce7;">
+            <div style="flex:1; background: #f0fdf4; padding: 10px; border-radius: 8px; border: 1px solid #dcfce7;">
               <strong style="color:var(--success);">Your skills useful for them:</strong>
               <ul style="margin: 4px 0 0; padding-left: 0; color:var(--success); list-style:none;">
-                ${(m.skills_you_can_help_them_with || []).map(s => `<li>✓ ${s}</li>`).join('')}
+                ${(m.skills_you_can_help_them_with || []).map(s => `<li>&#10003; ${s}</li>`).join('')}
               </ul>
             </div>
           </div>
 
-          <div class="ai-reasoning">🤖 ${m.ai_reasoning}</div>
           <div style="text-align:right; margin-top:16px;">
-            <button onclick="sendRequest('${m.id}',${m.compatibility_score},'${sr}',this)" style="width:auto;">💬 Request Exchange</button>
+            <button onclick="sendRequest('${m.id}',${m.compatibility_score},'${sr}',this)" style="width:auto;">&#129309; Request Exchange</button>
           </div>`;
         c.appendChild(div);
       });
