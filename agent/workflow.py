@@ -107,7 +107,7 @@ def compatibility_scoring(state: MatchState) -> MatchState:
         state["scored_matches"] = state["matched_users"]
         return state
         
-    llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_api_key)
+    llm = ChatGroq(model_name="openai/gpt-oss-120b", groq_api_key=groq_api_key)
     
     scored = []
     for u in state["matched_users"]:

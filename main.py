@@ -289,7 +289,7 @@ async def skill_structure_suggestion(req: StructureSuggestionRequest):
 
     try:
         from langchain_groq import ChatGroq
-        llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_api_key)
+        llm = ChatGroq(model_name="openai/gpt-oss-120b", groq_api_key=groq_api_key)
 
         skill_type_label = "teach/offer" if req.type == "offered" else "learn/need"
         prompt = f"""You are a skill-matching assistant. A user wants to {skill_type_label} the skill: "{req.skill_name}".
@@ -757,7 +757,7 @@ async def upload_voice_message(match_id: str, req: VoiceUploadRequest, user_id: 
             from langchain_groq import ChatGroq
             from langchain_core.messages import HumanMessage
             
-            llm = ChatGroq(model_name="llama-3.1-8b-instant", groq_api_key=groq_api_key)
+            llm = ChatGroq(model_name="openai/gpt-oss-120b", groq_api_key=groq_api_key)
             translate_prompt = f"""Translate the following text to {receiver_lang}. 
 Rules:
 - Do NOT translate URLs, code snippets, email addresses, or file names.
