@@ -67,7 +67,7 @@ SkillSwap is a full-stack web application that enables **zero-cost skill exchang
 |---|---|---|
 | **Backend** | FastAPI (Python) | REST APIs, JWT Authentication, Business Logic |
 | **AI Agent** | LangGraph + LangChain | 5-node stateful AI pipeline for intelligent matchmaking |
-| **LLM** | Groq (Llama 3.1 8B Instant) | Compatibility scoring, AI reasoning, and real-time translation |
+| **LLM** | Groq (GPT-OSS-120b / Llama 3) | Compatibility scoring, AI reasoning, and real-time translation |
 | **Speech-to-Text** | Groq (Whisper-large-v3) | Voice message transcription with high accuracy |
 | **Vector Database** | ChromaDB | Semantic skill search using sentence embeddings |
 | **Relational Database** | SQLite (WAL Mode) | Users, Skills, Matches, Messages, Calls, Credits |
@@ -85,6 +85,11 @@ SkillSwap is a full-stack web application that enables **zero-cost skill exchang
 - Passwords securely hashed using **Bcrypt**.
 - JWT token-based sessions with 24-hour expiry.
 - On registration, all user skills are **embedded into ChromaDB** as vectors for AI-powered semantic search.
+
+### 1.5. ✨ AI-Guided Skill Profiling
+- Simple keyword inputs (e.g., "Python") are intercepted and enriched by the **Groq LLM**.
+- AI automatically generates a 1-2 sentence descriptive context (e.g., "I can teach backend Python, FastAPI, and REST API design") and categorizes the skill.
+- This dramatically improves the density of the ChromaDB embeddings, leading to significantly higher quality semantic matches.
 
 ### 2. 🧠 AI-Powered Matchmaking Engine (5-Node LangGraph Pipeline)
 
