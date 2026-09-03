@@ -164,6 +164,31 @@ def init_db():
             FOREIGN KEY (match_id) REFERENCES Matches(id),
             FOREIGN KEY (last_edited_by) REFERENCES Users(id)
         );
+
+        CREATE TABLE IF NOT EXISTS UserStreaks (
+            user_id TEXT PRIMARY KEY,
+            current_streak INTEGER DEFAULT 0,
+            longest_streak INTEGER DEFAULT 0,
+            last_completed_period TEXT,
+            FOREIGN KEY (user_id) REFERENCES Users(id)
+        );
+        CREATE TABLE IF NOT EXISTS Badges (
+            id TEXT PRIMARY KEY,
+            code TEXT UNIQUE,
+            name TEXT,
+            description TEXT,
+            criteria_type TEXT,
+            criteria_value TEXT
+        );
+        CREATE TABLE IF NOT EXISTS UserBadges (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            badge_id TEXT,
+            awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES Users(id),
+            FOREIGN KEY (badge_id) REFERENCES Badges(id),
+            UNIQUE(user_id, badge_id)
+        );
     """)
     # Safely add preferred_language to Users if it doesn't exist
     try:
@@ -221,6 +246,13 @@ def init_db():
         c.execute("ALTER TABLE Matches ADD COLUMN cancelled_by TEXT")
     except:
         pass
+
+
+    # Migration for leaderboard privacy
+    try:
+        c.execute("ALTER TABLE Users ADD COLUMN leaderboard_visible BOOLEAN DEFAULT 1")
+    except:
+        pass  # Column already exists
 
     try:
         conn.commit()

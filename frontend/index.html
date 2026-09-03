@@ -70,6 +70,30 @@
     /* ========== APP LAYOUT ========== */
     .app-container { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
     
+
+    /* Gamification Styles */
+    .card.streak-card { background: linear-gradient(135deg, #ff6b35, #f7931e); color: white; }
+    .streak-value { font-size: 2rem; font-weight: 800; }
+    .streak-label { font-size: 0.85rem; opacity: 0.9; }
+    .badge-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 20px; font-size: 0.82rem; font-weight: 600;
+      background: linear-gradient(135deg, #ffd700, #ffb347); color: #5a3e00;
+      box-shadow: 0 2px 8px rgba(255, 179, 71, 0.3); cursor: default;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .badge-chip:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(255, 179, 71, 0.5); }
+    .badge-chip .badge-icon { font-size: 1.1rem; }
+    .leaderboard-table { width: 100%; border-collapse: collapse; }
+    .leaderboard-table th { text-align: left; padding: 12px 16px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 2px solid var(--border); }
+    .leaderboard-table td { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    .leaderboard-table tr:hover { background: var(--yellow-soft); }
+    .rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; font-weight: 800; font-size: 0.9rem; }
+    .rank-1 { background: linear-gradient(135deg, #ffd700, #ffb347); color: #5a3e00; }
+    .rank-2 { background: linear-gradient(135deg, #c0c0c0, #e8e8e8); color: #444; }
+    .rank-3 { background: linear-gradient(135deg, #cd7f32, #daa06d); color: #fff; }
+    .rank-default { background: var(--yellow-soft); color: var(--text-muted); }
+    
     /* Sidebar */
     .sidebar { 
       width: 260px; background: var(--sidebar-bg); backdrop-filter: blur(20px); 
@@ -459,6 +483,24 @@
             <div class="stat-label">Credits available</div>
           </div>
         </div>
+        <div class="flex gap-4" style="margin-top: 16px;">
+          <div class="card stat-card streak-card" style="flex: 1;">
+            <p style="font-weight: 600; opacity: 0.9;">&#128293; Streak</p>
+            <div class="streak-value" id="dashStreak">0</div>
+            <div class="streak-label">week streak (best: <span id="dashBestStreak">0</span>)</div>
+          </div>
+          <div class="card stat-card" style="flex: 1;">
+            <p class="section-title">&#127942; Completed Exchanges</p>
+            <div class="stat-value" id="dashCompletedExchanges" style="color: var(--primary);">0</div>
+            <div class="stat-label">Total exchanges</div>
+          </div>
+        </div>
+        <div class="card" style="margin-top: 16px;">
+          <p class="section-title">&#127942; Earned Badges</p>
+          <div id="dashBadges" style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span style="color: var(--text-muted); font-size: 0.9rem;">Complete exchanges to earn badges!</span>
+          </div>
+        </div>
         <div class="card">
           <p class="section-title">Your Skills Profile</p>
           <p style="margin-bottom:8px;"><strong>I Offer:</strong> <span id="dashOffered" style="color:var(--text-muted);"></span></p>
@@ -488,6 +530,31 @@
           <button onclick="findMatches()" id="matchBtn" style="width:auto; margin-top:8px;">🧠 Search the Network</button>
         </div>
         <div id="matchesContainer"></div>
+      </div>
+
+
+      <!-- LEADERBOARD -->
+      <div id="tab-leaderboard" class="tab-content hidden">
+        <h1 style="margin-bottom: 8px;">&#127941; City Leaderboard</h1>
+        <p style="color: var(--text-muted); margin-bottom: 24px;">Top skill exchangers in your area. Ranked by engagement score (completed exchanges &#215; 2 + trust score).</p>
+        <div class="card">
+          <div id="leaderboardCity" style="font-weight: 600; margin-bottom: 16px; color: var(--primary);"></div>
+          <table class="leaderboard-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Exchanges</th>
+                <th>Trust</th>
+                <th>Badges</th>
+                <th>Score</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardBody">
+              <tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:32px;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- CHAT -->
@@ -830,6 +897,7 @@
     document.getElementById('searchNeeded').value = data.skills_needed[0] || '';
     document.getElementById('searchOffered').value = data.skills_offered[0] || '';
     loadPendingRequests();
+    loadGamificationProfile();
   }
 
   async function loadPendingRequests() {
@@ -978,6 +1046,73 @@
     });
     if (res.ok) { btn.innerText = "✅ Sent!"; btn.style.background = "var(--success)"; toast("Request sent!"); }
     else { btn.disabled = false; btn.innerText = "💬 Request Exchange"; }
+  }
+
+
+  // ========== GAMIFICATION ==========
+  async function loadGamificationProfile() {
+    try {
+      const res = await fetch('/api/gamification/profile', { headers: {'Authorization': 'Bearer ' + token} });
+      if (!res.ok) return;
+      const data = await res.json();
+      document.getElementById('dashStreak').textContent = data.current_streak;
+      document.getElementById('dashBestStreak').textContent = data.longest_streak;
+      document.getElementById('dashCompletedExchanges').textContent = data.completed_exchanges;
+      
+      const badgesEl = document.getElementById('dashBadges');
+      if (data.badges && data.badges.length > 0) {
+        badgesEl.innerHTML = data.badges.map(b => 
+          `<span class="badge-chip" title="${b.description}"><span class="badge-icon">&#127942;</span> ${b.name}</span>`
+        ).join('');
+      } else {
+        badgesEl.innerHTML = '<span style="color: var(--text-muted); font-size: 0.9rem;">Complete exchanges to earn badges!</span>';
+      }
+      
+      // Store badge count for toast detection
+      window._lastBadgeCount = data.badges ? data.badges.length : 0;
+    } catch(e) { console.error('Gamification profile load failed:', e); }
+  }
+
+  async function checkForNewBadges() {
+    try {
+      const res = await fetch('/api/gamification/profile', { headers: {'Authorization': 'Bearer ' + token} });
+      if (!res.ok) return;
+      const data = await res.json();
+      const newCount = data.badges ? data.badges.length : 0;
+      if (typeof window._lastBadgeCount === 'number' && newCount > window._lastBadgeCount) {
+        const newest = data.badges[0]; // Most recently awarded (ordered DESC)
+        toast('&#127942; New badge earned: ' + newest.name + '!');
+      }
+      window._lastBadgeCount = newCount;
+      loadGamificationProfile(); // Refresh display
+    } catch(e) { console.error('Badge check failed:', e); }
+  }
+
+  async function loadLeaderboard() {
+    try {
+      const res = await fetch('/api/gamification/leaderboard', { headers: {'Authorization': 'Bearer ' + token} });
+      if (!res.ok) return;
+      const data = await res.json();
+      document.getElementById('leaderboardCity').textContent = '&#128205; ' + (data.city || 'Your City');
+      const tbody = document.getElementById('leaderboardBody');
+      if (!data.leaderboard || data.leaderboard.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:32px;">No users found in this city yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.leaderboard.map(u => {
+        const rankClass = u.rank <= 3 ? 'rank-' + u.rank : 'rank-default';
+        const medals = ['', '&#129351;', '&#129352;', '&#129353;'];
+        const medal = u.rank <= 3 ? medals[u.rank] : '';
+        return `<tr>
+          <td><span class="rank-badge ${rankClass}">${medal || u.rank}</span></td>
+          <td style="font-weight:600;">${u.name}${u.id === currentUserId ? ' <span style="color:var(--primary);font-size:0.8rem;">(You)</span>' : ''}</td>
+          <td>${u.completed_exchanges || 0}</td>
+          <td>${(u.trust_score || 0).toFixed(1)}/5</td>
+          <td>${u.badge_count || 0} &#127942;</td>
+          <td style="font-weight:700; color:var(--primary);">${(u.score || 0).toFixed(1)}</td>
+        </tr>`;
+      }).join('');
+    } catch(e) { console.error('Leaderboard load failed:', e); }
   }
 
   // ========== CHAT ==========

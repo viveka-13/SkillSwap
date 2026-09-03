@@ -79,6 +79,14 @@ def groq_whisper_transcribe(audio_bytes: bytes, filename: str = 'audio.webm', de
 load_dotenv()
 app = FastAPI()
 
+# Seed gamification badges at startup
+try:
+    from agent.gamification import seed_badges
+    seed_badges()
+except Exception as e:
+    print(f'Badge seeding failed (non-critical): {e}')
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -486,6 +494,16 @@ async def confirm_exchange(match_id: str, user_id: str = Depends(get_current_use
             detect_cycling(match["user2_id"])
         except Exception:
             logger.exception("Credit cycling detection failed for match %s", match_id)
+
+        # Gamification hooks (non-blocking — failure must never block exchange completion)
+        try:
+            from agent.gamification import update_streak, check_and_award_badges
+            update_streak(match["user1_id"])
+            update_streak(match["user2_id"])
+            check_and_award_badges(match["user1_id"])
+            check_and_award_badges(match["user2_id"])
+        except Exception:
+            logger.exception("Gamification hook failed for match %s", match_id)
         
         return {"status": "completed", "message": "Exchange completed, credits released."}
     else:
@@ -1103,3 +1121,83 @@ def get_ice_config(current_user_id: str = Depends(get_current_user_id)):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# ══════════════════════════════════════════════════════════════
+# GAMIFICATION ENDPOINTS
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/api/gamification/profile")
+async def gamification_profile(user_id: str = Depends(get_current_user_id)):
+    """Return the authenticated user's streak data and earned badges."""
+    # Streak data
+    streak_rows = fetch_query("SELECT * FROM UserStreaks WHERE user_id = ?", (user_id,))
+    streak = streak_rows[0] if streak_rows else {"current_streak": 0, "longest_streak": 0, "last_completed_period": None}
+
+    # Earned badges
+    badges = fetch_query(
+        """SELECT b.id, b.code, b.name, b.description, ub.awarded_at
+           FROM UserBadges ub JOIN Badges b ON ub.badge_id = b.id
+           WHERE ub.user_id = ?
+           ORDER BY ub.awarded_at DESC""",
+        (user_id,)
+    )
+
+    # Completed exchange count
+    completed = fetch_query(
+        "SELECT COUNT(*) as cnt FROM Matches WHERE status = 'completed' AND (user1_id = ? OR user2_id = ?)",
+        (user_id, user_id)
+    )
+    completed_count = completed[0]["cnt"] if completed else 0
+
+    return {
+        "current_streak": streak["current_streak"],
+        "longest_streak": streak["longest_streak"],
+        "last_completed_period": streak.get("last_completed_period"),
+        "completed_exchanges": completed_count,
+        "badges": badges,
+    }
+
+
+@app.get("/api/gamification/leaderboard")
+async def gamification_leaderboard(city: str = "", user_id: str = Depends(get_current_user_id)):
+    """
+    City-level leaderboard ranked by a simple engagement formula.
+    
+    Ranking formula: completed_exchanges * 2 + trust_score
+    This weights actual exchange activity more heavily than passive trust,
+    encouraging active participation.
+    
+    Returns top 20 users. Only includes users with leaderboard_visible = 1.
+    If no city is provided, uses the authenticated user's city.
+    """
+    if not city:
+        user_rows = fetch_query("SELECT city FROM Users WHERE id = ?", (user_id,))
+        city = user_rows[0]["city"] if user_rows else ""
+
+    if not city:
+        return {"leaderboard": [], "city": ""}
+
+    leaderboard = fetch_query(
+        """SELECT u.id, u.name, u.city, u.trust_score,
+                  COUNT(CASE WHEN m.status = 'completed' THEN 1 END) as completed_exchanges,
+                  (COUNT(CASE WHEN m.status = 'completed' THEN 1 END) * 2 + COALESCE(u.trust_score, 0)) as score
+           FROM Users u
+           LEFT JOIN Matches m ON (m.user1_id = u.id OR m.user2_id = u.id)
+           WHERE LOWER(u.city) = LOWER(?) AND u.leaderboard_visible = 1
+           GROUP BY u.id
+           ORDER BY score DESC
+           LIMIT 20""",
+        (city,)
+    )
+
+    # Add rank numbers and badge counts
+    for i, entry in enumerate(leaderboard):
+        entry["rank"] = i + 1
+        badge_count = fetch_query(
+            "SELECT COUNT(*) as cnt FROM UserBadges WHERE user_id = ?",
+            (entry["id"],)
+        )
+        entry["badge_count"] = badge_count[0]["cnt"] if badge_count else 0
+
+    return {"leaderboard": leaderboard, "city": city}
