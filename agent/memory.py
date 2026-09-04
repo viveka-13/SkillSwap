@@ -254,6 +254,20 @@ def init_db():
     except:
         pass  # Column already exists
 
+
+    # --- Message deletion columns (WhatsApp-style) ---
+    for table in ["Messages", "VoiceMessages", "YoutubeLinks"]:
+        for col, coltype in [
+            ("deleted_for_everyone", "BOOLEAN DEFAULT 0"),
+            ("deleted_for_everyone_at", "TIMESTAMP"),
+            ("deleted_for_sender", "BOOLEAN DEFAULT 0"),
+            ("deleted_for_recipient", "BOOLEAN DEFAULT 0"),
+        ]:
+            try:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}")
+            except:
+                pass  # Column already exists
+
     try:
         conn.commit()
     finally:

@@ -207,6 +207,12 @@ class VoiceUploadRequest(BaseModel):
     data: str  # base64-encoded audio content
     duration: float = 0.0
 
+class DeleteMessageRequest(BaseModel):
+    mode: str  # "for_me" or "for_everyone"
+
+# WhatsApp-style: allow "delete for everyone" within this window only
+DELETE_FOR_EVERYONE_WINDOW_MINUTES = 30
+
 def get_current_user_id(request: Request):
     auth_header = request.headers.get("Authorization")
     if not auth_header:
@@ -603,18 +609,18 @@ async def get_chat_messages(match_id: str, user_id: str = Depends(get_current_us
         raise HTTPException(status_code=403, detail="Not part of this match")
     
     # Text + File messages
-    text_msgs = fetch_query("SELECT id, match_id, sender_id, content, created_at FROM Messages WHERE match_id = ? ORDER BY created_at ASC", (match_id,))
+    text_msgs = fetch_query("SELECT id, match_id, sender_id, content, created_at, deleted_for_everyone, deleted_for_everyone_at, deleted_for_sender, deleted_for_recipient FROM Messages WHERE match_id = ? ORDER BY created_at ASC", (match_id,))
     for m in text_msgs:
         m["msg_type"] = "text"  # will be overridden by JS if content is JSON file meta
     
     # Voice messages
-    voice_msgs = fetch_query("SELECT id, match_id, sender_id, filename, duration, original_text, translated_text, language_code, translation_status, created_at FROM VoiceMessages WHERE match_id = ? ORDER BY created_at ASC", (match_id,))
+    voice_msgs = fetch_query("SELECT id, match_id, sender_id, filename, duration, original_text, translated_text, language_code, translation_status, created_at, deleted_for_everyone, deleted_for_everyone_at, deleted_for_sender, deleted_for_recipient FROM VoiceMessages WHERE match_id = ? ORDER BY created_at ASC", (match_id,))
     for v in voice_msgs:
         v["msg_type"] = "voice"
         v["content"] = ""  # placeholder for unified rendering
     
     # YouTube links
-    yt_msgs = fetch_query("SELECT id, match_id, sender_id, url, video_id, title, thumbnail, channel, duration, created_at FROM YoutubeLinks WHERE match_id = ? ORDER BY created_at ASC", (match_id,))
+    yt_msgs = fetch_query("SELECT id, match_id, sender_id, url, video_id, title, thumbnail, channel, duration, created_at, deleted_for_everyone, deleted_for_everyone_at, deleted_for_sender, deleted_for_recipient FROM YoutubeLinks WHERE match_id = ? ORDER BY created_at ASC", (match_id,))
     for y in yt_msgs:
         y["msg_type"] = "youtube"
         y["content"] = ""  # placeholder
@@ -630,7 +636,116 @@ async def get_chat_messages(match_id: str, user_id: str = Depends(get_current_us
     all_msgs = text_msgs + voice_msgs + yt_msgs + call_msgs
     all_msgs.sort(key=lambda x: x.get("created_at", ""))
     
-    return {"messages": all_msgs}
+    # Apply WhatsApp-style deletion visibility filtering
+    filtered = []
+    for msg in all_msgs:
+        # Call logs are never deletable — pass through
+        if msg.get("msg_type") == "call_log":
+            filtered.append(msg)
+            continue
+        
+        is_sender = msg.get("sender_id") == user_id
+        
+        # "Delete for me" — omit entirely for the user who deleted it
+        if is_sender and msg.get("deleted_for_sender"):
+            continue
+        if not is_sender and msg.get("deleted_for_recipient"):
+            continue
+        
+        # "Delete for everyone" — show placeholder
+        if msg.get("deleted_for_everyone"):
+            filtered.append({
+                "id": msg["id"],
+                "match_id": msg["match_id"],
+                "sender_id": msg["sender_id"],
+                "content": None,
+                "created_at": msg["created_at"],
+                "msg_type": "deleted",
+                "deleted": True,
+                "deleted_scope": "everyone"
+            })
+            continue
+        
+        # Normal message — strip deletion metadata from response
+        for key in ["deleted_for_everyone", "deleted_for_everyone_at", "deleted_for_sender", "deleted_for_recipient"]:
+            msg.pop(key, None)
+        filtered.append(msg)
+    
+    return {"messages": filtered}
+
+
+
+# ========== MESSAGE DELETION (WhatsApp-style) ==========
+
+@app.post("/api/chat/{match_id}/messages/{message_id}/delete")
+async def delete_message(match_id: str, message_id: str, req: DeleteMessageRequest, user_id: str = Depends(get_current_user_id)):
+    """Delete a message: 'for_me' hides it for requester only; 'for_everyone' shows placeholder to both."""
+    # Verify user is participant
+    match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
+    if not match:
+        raise HTTPException(status_code=403, detail="Not part of this match")
+    
+    if req.mode not in ("for_me", "for_everyone"):
+        raise HTTPException(status_code=400, detail="Mode must be 'for_me' or 'for_everyone'")
+    
+    # Find the message across all message tables
+    msg = None
+    table = None
+    for tbl in ["Messages", "VoiceMessages", "YoutubeLinks"]:
+        rows = fetch_query(f"SELECT id, sender_id, created_at FROM {tbl} WHERE id = ? AND match_id = ?", (message_id, match_id))
+        if rows:
+            msg = rows[0]
+            table = tbl
+            break
+    
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    is_sender = msg["sender_id"] == user_id
+    
+    if req.mode == "for_me":
+        if is_sender:
+            run_query(f"UPDATE {table} SET deleted_for_sender = 1 WHERE id = ?", (message_id,))
+        else:
+            run_query(f"UPDATE {table} SET deleted_for_recipient = 1 WHERE id = ?", (message_id,))
+        return {"status": "deleted", "mode": "for_me"}
+    
+    # for_everyone
+    if not is_sender:
+        raise HTTPException(status_code=403, detail="Only the sender can delete a message for everyone")
+    
+    # Time window check
+    try:
+        created = datetime.fromisoformat(str(msg["created_at"]).replace("Z", "+00:00"))
+    except:
+        created = datetime.strptime(str(msg["created_at"]), "%Y-%m-%d %H:%M:%S")
+    
+    now = datetime.utcnow()
+    age_minutes = (now - created.replace(tzinfo=None)).total_seconds() / 60
+    
+    if age_minutes > DELETE_FOR_EVERYONE_WINDOW_MINUTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This message is too old to delete for everyone (sent {int(age_minutes)} min ago, limit is {DELETE_FOR_EVERYONE_WINDOW_MINUTES} min). You can still delete it for yourself."
+        )
+    
+    run_query(f"UPDATE {table} SET deleted_for_everyone = 1, deleted_for_everyone_at = CURRENT_TIMESTAMP WHERE id = ?", (message_id,))
+    return {"status": "deleted", "mode": "for_everyone"}
+
+
+@app.post("/api/chat/{match_id}/clear")
+async def clear_chat(match_id: str, user_id: str = Depends(get_current_user_id)):
+    """Clear all messages in a chat for the requesting user only (bulk 'delete for me')."""
+    match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
+    if not match:
+        raise HTTPException(status_code=403, detail="Not part of this match")
+    
+    # For each table: set deleted_for_sender where user is sender, deleted_for_recipient where user is recipient
+    for table in ["Messages", "VoiceMessages", "YoutubeLinks"]:
+        run_query(f"UPDATE {table} SET deleted_for_sender = 1 WHERE match_id = ? AND sender_id = ?", (match_id, user_id))
+        run_query(f"UPDATE {table} SET deleted_for_recipient = 1 WHERE match_id = ? AND sender_id != ?", (match_id, user_id))
+    
+    return {"status": "cleared"}
 
 class CallLogRequest(BaseModel):
     call_id: str

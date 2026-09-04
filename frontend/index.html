@@ -71,6 +71,44 @@
     .app-container { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
     
 
+    
+    /* Message Deletion Context Menu */
+    .msg-wrapper { position: relative; }
+    .msg-menu-btn {
+      position: absolute; top: 4px; right: 4px; background: none; border: none;
+      cursor: pointer; font-size: 1rem; opacity: 0; transition: opacity 0.2s;
+      color: var(--text-muted); padding: 2px 6px; border-radius: 4px; z-index: 5;
+    }
+    .msg-wrapper:hover .msg-menu-btn,
+    .msg-wrapper .msg-menu-btn.active { opacity: 1; }
+    .msg-wrapper .sent ~ .msg-menu-btn,
+    .msg-wrapper:has(.sent) .msg-menu-btn { right: auto; left: 4px; }
+    .msg-menu-dropdown {
+      position: absolute; top: 24px; right: 0; background: white; border: 1px solid var(--border);
+      border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); z-index: 10;
+      min-width: 180px; overflow: hidden; display: none;
+    }
+    .msg-wrapper:has(.sent) .msg-menu-dropdown { right: auto; left: 0; }
+    .msg-menu-dropdown.show { display: block; }
+    .msg-menu-dropdown button {
+      display: block; width: 100%; padding: 10px 16px; border: none; background: none;
+      text-align: left; cursor: pointer; font-size: 0.88rem; color: var(--text);
+      transition: background 0.15s;
+    }
+    .msg-menu-dropdown button:hover { background: #f5f5f5; }
+    .msg-menu-dropdown button.danger { color: #ef4444; }
+    .msg-menu-dropdown button.danger:hover { background: #fef2f2; }
+    .deleted-bubble {
+      padding: 8px 16px; border-radius: 14px; background: rgba(0,0,0,0.04);
+      color: var(--text-muted); font-style: italic; font-size: 0.88rem;
+      border: 1px dashed rgba(0,0,0,0.1);
+    }
+    .clear-chat-btn {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 0.85rem; padding: 4px 8px; border-radius: 6px; transition: all 0.2s;
+    }
+    .clear-chat-btn:hover { background: #fef2f2; color: #ef4444; }
+
     /* Gamification Styles */
     .card.streak-card { background: linear-gradient(135deg, #ff6b35, #f7931e); color: white; }
     .streak-value { font-size: 2rem; font-weight: 800; }
@@ -570,6 +608,7 @@
             <div class="chat-header" style="display:flex; justify-content:space-between; align-items:center;">
               <div><span style="font-size:1.3rem;">💬</span> Chat with <span id="chatPartnerName" style="color: var(--primary);">User</span></div>
               <div style="display:flex; gap: 8px;">
+                <button class="btn-call" onclick="clearChat()" title="Clear Chat (for me)">🧹</button>
                 <button class="btn-call" onclick="toggleNotesPanel()" title="Shared Notes">📝</button>
                 <button class="btn-call" onclick="initiateCall('audio')" title="Audio Call">📞</button>
                 <button class="btn-call" onclick="initiateCall('video')" title="Video Call">🎥</button>
@@ -1265,6 +1304,25 @@
         const cls = isMine ? 'sent' : 'received';
         const time = formatTime(m.created_at);
 
+        // ===== DELETED MESSAGE PLACEHOLDER =====
+        if (m.deleted && m.deleted_scope === 'everyone') {
+          return `
+            <div class="msg-wrapper ${cls}">
+              <div class="deleted-bubble">🚫 This message was deleted</div>
+              <div class="msg-time">${time}</div>
+            </div>`;
+        }
+
+        // Context menu for non-deleted messages (not call logs)
+        const menuId = 'menu-' + m.id;
+        const canDeleteForEveryone = isMine && (Date.now() - new Date(m.created_at).getTime()) < 30 * 60 * 1000;
+        const msgMenuHtml = m.msg_type !== 'call_log' ? `
+          <button class="msg-menu-btn" onclick="toggleMsgMenu(event, '${menuId}')">⋮</button>
+          <div class="msg-menu-dropdown" id="${menuId}">
+            <button onclick="deleteMessage('${m.match_id}', '${m.id}', 'for_me', '${menuId}')">🗑 Delete for Me</button>
+            ${canDeleteForEveryone ? '<button class="danger" onclick="deleteMessage(\'' + m.match_id + '\', \'' + m.id + '\', \'for_everyone\', \'' + menuId + '\')">🗑 Delete for Everyone</button>' : ''}
+          </div>` : '';
+
         // ===== CALL LOG =====
         if (m.msg_type === 'call_log') {
           const callIcon = m.call_type === 'video' ? '🎥' : '📞';
@@ -1308,6 +1366,7 @@
           }).join('');
           return `
             <div class="msg-wrapper ${cls}">
+              ${msgMenuHtml}
               <div class="voice-bubble ${cls}">
                 <div class="voice-player">
                   <button class="voice-play-btn" onclick="toggleVoicePlay(this, '/api/audio/${m.filename}')">▶</button>
@@ -1329,6 +1388,7 @@
         if (m.msg_type === 'youtube') {
           return `
             <div class="msg-wrapper ${cls}">
+              ${msgMenuHtml}
               <a href="${m.url}" target="_blank" class="yt-card ${cls}">
                 <div class="yt-thumb">
                   <img src="${m.thumbnail}" alt="${m.title}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22180%22%3E%3Crect fill=%22%23222%22 width=%22320%22 height=%22180%22/%3E%3Ctext fill=%22%23999%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2216%22%3EVideo%3C/text%3E%3C/svg%3E'">
@@ -1355,6 +1415,7 @@
             }
             return `
               <div class="msg-wrapper ${cls}">
+                ${msgMenuHtml}
                 <a href="/api/files/${meta.stored_as}" target="_blank" download="${meta.filename}" class="file-bubble ${cls}" style="text-decoration:none;">
                   <div class="file-icon">${icon}</div>
                   <div class="file-info">
@@ -1371,6 +1432,7 @@
         // ===== NORMAL TEXT =====
         return `
           <div class="msg-wrapper ${cls}">
+            ${msgMenuHtml}
             <div class="message ${cls}">${m.content}</div>
             <div class="msg-time">${time}</div>
           </div>`;
@@ -1997,6 +2059,83 @@
       };
       
       checkSummary();
+  }
+
+
+
+  // ========== MESSAGE DELETION ==========
+  function toggleMsgMenu(event, menuId) {
+    event.stopPropagation();
+    // Close all other menus first
+    document.querySelectorAll('.msg-menu-dropdown.show').forEach(el => {
+      if (el.id !== menuId) el.classList.remove('show');
+    });
+    const menu = document.getElementById(menuId);
+    menu.classList.toggle('show');
+    // Mark button as active
+    const btn = menu.previousElementSibling;
+    if (btn) btn.classList.toggle('active', menu.classList.contains('show'));
+  }
+
+  // Close menus when clicking outside
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.msg-menu-dropdown.show').forEach(el => el.classList.remove('show'));
+    document.querySelectorAll('.msg-menu-btn.active').forEach(el => el.classList.remove('active'));
+  });
+
+  async function deleteMessage(matchId, messageId, mode, menuId) {
+    // Close menu immediately
+    const menu = document.getElementById(menuId);
+    if (menu) menu.classList.remove('show');
+
+    const confirmMsg = mode === 'for_everyone'
+      ? 'Delete this message for everyone? They will see "This message was deleted."'
+      : 'Delete this message for yourself? The other person will still see it.';
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const res = await fetch(`/api/chat/${matchId}/messages/${messageId}/delete`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+        body: JSON.stringify({ mode: mode })
+      });
+      if (res.ok) {
+        toast(mode === 'for_everyone' ? '🗑 Message deleted for everyone' : '🗑 Message deleted');
+        fetchMessages();
+      } else {
+        const data = await res.json();
+        toast('Error: ' + (data.detail || 'Could not delete message'));
+      }
+    } catch(e) {
+      toast('Error deleting message');
+      console.error(e);
+    }
+  }
+
+  async function clearChat() {
+    if (!activeMatchId) return;
+    const partnerName = document.getElementById('chatPartnerName').innerText;
+    const confirmed = confirm(
+      `This will clear your chat history with ${partnerName}. They will still see the full conversation on their side. New messages sent after this will appear normally. This can't be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/chat/${activeMatchId}/clear`, {
+        method: 'POST',
+        headers: {'Authorization': 'Bearer ' + token}
+      });
+      if (res.ok) {
+        toast('🧹 Chat history cleared');
+        fetchMessages();
+      } else {
+        const data = await res.json();
+        toast('Error: ' + (data.detail || 'Could not clear chat'));
+      }
+    } catch(e) {
+      toast('Error clearing chat');
+      console.error(e);
+    }
   }
 
   // --- ADMIN FUNCTIONS ---
