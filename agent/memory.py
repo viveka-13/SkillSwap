@@ -246,6 +246,14 @@ def init_db():
         c.execute("ALTER TABLE Matches ADD COLUMN cancelled_by TEXT")
     except:
         pass
+        
+    # --- Remove connection columns ---
+    try:
+        c.execute("ALTER TABLE Matches ADD COLUMN removed_by TEXT")
+        c.execute("ALTER TABLE Matches ADD COLUMN removed_at TIMESTAMP")
+    except:
+        pass
+
 
 
     # Migration for leaderboard privacy

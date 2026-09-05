@@ -608,6 +608,7 @@
             <div class="chat-header" style="display:flex; justify-content:space-between; align-items:center;">
               <div><span style="font-size:1.3rem;">💬</span> Chat with <span id="chatPartnerName" style="color: var(--primary);">User</span></div>
               <div style="display:flex; gap: 8px;">
+                <button class="btn-call" onclick="removeConnection()" title="Remove Connection">⛔</button>
                 <button class="btn-call" onclick="clearChat()" title="Clear Chat (for me)">🧹</button>
                 <button class="btn-call" onclick="toggleNotesPanel()" title="Shared Notes">📝</button>
                 <button class="btn-call" onclick="initiateCall('audio')" title="Audio Call">📞</button>
@@ -1155,7 +1156,32 @@
   }
 
   // ========== CHAT ==========
-  async function loadChatRooms() {
+  
+  async function removeConnection() {
+    if (!activeMatchId) return;
+    const partnerName = document.getElementById('chatPartnerName').innerText;
+    const msg = `This will end your connection with ${partnerName} and refund any pending credits. Your chat history will remain visible but you won't be able to send new messages. This can't be undone.`;
+    if (!confirm(msg)) return;
+    
+    try {
+      const res = await fetch(`/api/matches/${activeMatchId}/remove-connection`, {
+        method: 'POST',
+        headers: {'Authorization': 'Bearer ' + token}
+      });
+      if (res.ok) {
+        toast("Connection removed successfully.");
+        fetchMessages();
+        loadChatRooms();
+      } else {
+        const data = await res.json();
+        toast("Error: " + (data.detail || "Could not remove connection"));
+      }
+    } catch(e) {
+      toast("Error removing connection.");
+      console.error(e);
+    }
+  }
+async function loadChatRooms() {
     const res = await fetch('/api/chat/rooms', { headers: {'Authorization': 'Bearer ' + token} });
     if (!res.ok) return;
     const data = await res.json();

@@ -521,6 +521,41 @@ async def confirm_exchange(match_id: str, user_id: str = Depends(get_current_use
         
         return {"status": "waiting", "message": "Waiting on the other party to confirm."}
 
+
+@app.post("/api/matches/{match_id}/remove-connection")
+async def remove_connection(match_id: str, user_id: str = Depends(get_current_user_id)):
+    """Remove an active connection (accepted or in_progress), refunding escrow credits if any."""
+    match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    match = match[0]
+    
+    if match["status"] == "pending":
+        raise HTTPException(status_code=400, detail="Match is still pending. Use the reject/cancel request flow instead.")
+    if match["status"] == "completed":
+        raise HTTPException(status_code=409, detail="Cannot remove a completed exchange.")
+    if match["status"] in ("removed", "cancelled"):
+        raise HTTPException(status_code=409, detail="Connection is already ended.")
+        
+    # If there are credits held in escrow (in_progress), refund them
+    if match.get("credits_held", 0) > 0:
+        run_query("UPDATE Users SET wallet_balance = wallet_balance + ? WHERE id = ?", (match["credits_held"], match["user1_id"]))
+        
+    # Mark as removed
+    run_query(
+        "UPDATE Matches SET status = 'removed', credits_held = 0, removed_by = ?, removed_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (user_id, match_id)
+    )
+    
+    # Notify the other user neutrally
+    other_user_id = match["user2_id"] if user_id == match["user1_id"] else match["user1_id"]
+    run_query(
+        "INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)",
+        (str(uuid.uuid4()), other_user_id, "ℹ️ A connection you were in has ended. Your chat history remains visible.")
+    )
+    
+    return {"status": "removed", "message": "Connection removed successfully."}
+
 @app.post("/api/exchange/{match_id}/cancel")
 async def cancel_exchange(match_id: str, user_id: str = Depends(get_current_user_id)):
     """Cancel an in-progress exchange and refund credits."""
@@ -595,7 +630,7 @@ async def get_chat_rooms(user_id: str = Depends(get_current_user_id)):
     rooms = fetch_query(
         """SELECT m.id as match_id, u.id as other_user_id, u.name as other_user_name, m.compatibility_score, m.status 
            FROM Matches m JOIN Users u ON (m.user1_id = u.id OR m.user2_id = u.id)
-           WHERE (m.user1_id = ? OR m.user2_id = ?) AND u.id != ? AND m.status IN ('accepted', 'in_progress', 'completed')
+           WHERE (m.user1_id = ? OR m.user2_id = ?) AND u.id != ? AND m.status IN ('accepted', 'in_progress', 'completed', 'removed')
            ORDER BY m.created_at DESC""",
         (user_id, user_id, user_id)
     )
@@ -671,7 +706,7 @@ async def get_chat_messages(match_id: str, user_id: str = Depends(get_current_us
             msg.pop(key, None)
         filtered.append(msg)
     
-    return {"messages": filtered}
+    return {"messages": filtered, "match_status": match[0]["status"]}
 
 
 
@@ -769,7 +804,9 @@ async def send_chat_message(match_id: str, req: ChatRequest, user_id: str = Depe
     match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
     if not match:
         raise HTTPException(status_code=403, detail="Not part of this match")
-    if match[0]["status"] not in ("accepted", "in_progress", "completed"):
+    if match[0]["status"] == "removed":
+        raise HTTPException(status_code=403, detail="This connection has been removed. Chat is read-only.")
+    if match[0]["status"] not in ("accepted", "in_progress", "completed", "removed"):
         raise HTTPException(status_code=400, detail="Exchange not active yet")
     
     content = req.content.strip()
@@ -819,7 +856,9 @@ async def upload_file_to_chat(match_id: str, req: FileUploadRequest, user_id: st
     match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
     if not match:
         raise HTTPException(status_code=403, detail="Not part of this match")
-    if match[0]["status"] not in ("accepted", "in_progress", "completed"):
+    if match[0]["status"] == "removed":
+        raise HTTPException(status_code=403, detail="This connection has been removed. Chat is read-only.")
+    if match[0]["status"] not in ("accepted", "in_progress", "completed", "removed"):
         raise HTTPException(status_code=400, detail="Exchange not active yet")
     
     # Validate file type
@@ -853,7 +892,9 @@ async def upload_voice_message(match_id: str, req: VoiceUploadRequest, user_id: 
     match = fetch_query("SELECT * FROM Matches WHERE id = ? AND (user1_id = ? OR user2_id = ?)", (match_id, user_id, user_id))
     if not match:
         raise HTTPException(status_code=403, detail="Not part of this match")
-    if match[0]["status"] not in ("accepted", "in_progress", "completed"):
+    if match[0]["status"] == "removed":
+        raise HTTPException(status_code=403, detail="This connection has been removed. Chat is read-only.")
+    if match[0]["status"] not in ("accepted", "in_progress", "completed", "removed"):
         raise HTTPException(status_code=400, detail="Exchange not active yet")
     
     # Validate size (15MB max)
