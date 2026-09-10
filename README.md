@@ -112,7 +112,8 @@ This is the core intelligence of the platform — a **5-node LangGraph state mac
 
 ### 4. 🪙 Credit-Based Trust Economy
 - Every new user starts with **10 credits**.
-- When an exchange is accepted, **5 credits** transfer from requester to acceptor.
+- When an exchange is accepted, **5 credits** are deducted from the requester and **held in Escrow**.
+- Credits are only released to the acceptor when BOTH users confirm the exchange is completed.
 - Prevents abuse and ensures both parties are committed to the exchange.
 
 ### 5. ⭐ Trust Score & Ratings
@@ -133,6 +134,8 @@ A full-featured communication system built directly into the platform:
 | **AI Translation** | Groq Llama 3.1 | On-the-fly translation if sender and receiver speak different languages |
 | **YouTube Previews** | OEmbed API | Automatic rich link cards with thumbnails for shared YouTube URLs |
 | **Call History** | SQLite Logging | Persistent call logs (duration, missed/rejected) merged into chat feed |
+| **Message Deletion** | Soft-delete flags | WhatsApp-style 'Delete for Me' and 'Delete for Everyone' (within 30 mins) |
+| **Clear Chat** | Bulk update | Hides the entire chat history for the requester only |
 
 ### 7. 📎 File & Document Sharing
 - Share **PDFs, DOCX, PPTX, Images (JPG/PNG)** and more via the `+` button in chat.
@@ -142,6 +145,18 @@ A full-featured communication system built directly into the platform:
 ### 8. 🔔 Smart Notification System
 - Receive notifications when someone sends you a match request.
 - Get notified with credit transfer details when someone accepts your exchange.
+
+### 9. 🏆 Gamification & Engagement
+- **Streaks**: Users build consecutive weekly streaks by completing skill exchanges.
+- **Badges**: Users earn skill-based and engagement badges.
+- **Local Leaderboard**: City-level leaderboard displaying top users based on completed exchanges, encouraging local community engagement.
+- All gamification is purely cosmetic and does not affect the core matchmaking economy or trust scores.
+
+### 10. 🔌 Safe Connections & Disconnects
+- **Remove Connection**: Users can disconnect from an active match at any time.
+- **Automatic Refund**: If the exchange was in progress, any credits held in escrow are safely refunded to the requester.
+- **Read-Only History**: Disconnecting marks the chat room as read-only. Both users can view past messages, but no new messages, files, or calls can be initiated.
+
 
 ---
 
@@ -214,7 +229,12 @@ Step 6: Rate & Build Trust
 | `GET` | `/api/dashboard` | Fetch user profile, trust score, wallet, skills |
 | `POST` | `/api/matches` | Trigger full AI matchmaking pipeline (LangGraph) |
 | `POST` | `/api/exchange/request` | Send a skill exchange request |
-| `POST` | `/api/exchange/accept/{id}` | Accept request + auto-transfer credits |
+| `POST` | `/api/exchange/accept/{id}` | Accept request (holds credits in escrow) |
+| `POST` | `/api/exchange/{id}/confirm` | Confirm an exchange is completed (releases escrow) |
+| `POST` | `/api/exchange/{id}/cancel` | Cancel an in-progress exchange and refund credits |
+| `POST` | `/api/chat/{id}/messages/{msg_id}/delete` | Delete a message ('for_me' or 'for_everyone') |
+| `POST` | `/api/chat/{id}/clear` | Clear chat history for the requester |
+| `POST` | `/api/matches/{id}/remove-connection` | Remove connection, refund escrow, make chat read-only |
 | `GET` | `/api/exchange/pending` | List pending incoming requests |
 | `GET` | `/api/exchange/history` | View completed exchange history |
 | `GET` | `/api/chat/rooms` | List all active chat rooms |
