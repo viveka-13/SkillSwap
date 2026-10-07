@@ -17,6 +17,7 @@ import jwt
 import bcrypt
 
 from agent.workflow import run_matchmaking
+from agent.push import send_push_to_user
 from agent.memory import run_query, fetch_query, skills_collection
 
 import logging
@@ -224,6 +225,47 @@ def get_current_user_id(request: Request):
     except:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+
+
+# --- Web Push Endpoints ---
+class PushSubscriptionRequest(BaseModel):
+    endpoint: str
+    keys: dict
+    user_agent: str = None
+
+@app.get("/api/push/vapid-public-key")
+async def get_vapid_public_key():
+    key = os.getenv("VAPID_PUBLIC_KEY")
+    if not key:
+        raise HTTPException(status_code=501, detail="Push not configured")
+    return {"vapidPublicKey": key}
+
+@app.post("/api/push/subscribe")
+async def push_subscribe(req: PushSubscriptionRequest, user_id: str = Depends(get_current_user_id)):
+    existing = fetch_query("SELECT id FROM PushSubscriptions WHERE endpoint = ?", (req.endpoint,))
+    if existing:
+        run_query("UPDATE PushSubscriptions SET user_id = ?, p256dh_key = ?, auth_key = ?, user_agent = ? WHERE endpoint = ?",
+                  (user_id, req.keys.get("p256dh", ""), req.keys.get("auth", ""), req.user_agent, req.endpoint))
+    else:
+        run_query("INSERT INTO PushSubscriptions (id, user_id, endpoint, p256dh_key, auth_key, user_agent) VALUES (?, ?, ?, ?, ?, ?)",
+                  (str(uuid.uuid4()), user_id, req.endpoint, req.keys.get("p256dh", ""), req.keys.get("auth", ""), req.user_agent))
+    return {"status": "subscribed"}
+
+@app.post("/api/push/unsubscribe")
+async def push_unsubscribe(req: dict, user_id: str = Depends(get_current_user_id)):
+    endpoint = req.get("endpoint")
+    if endpoint:
+        run_query("DELETE FROM PushSubscriptions WHERE endpoint = ? AND user_id = ?", (endpoint, user_id))
+    return {"status": "unsubscribed"}
+
+@app.get("/service-worker.js")
+async def get_service_worker():
+    return FileResponse("frontend/service-worker.js", media_type="application/javascript")
+
+@app.get("/manifest.json")
+async def get_manifest():
+    return FileResponse("frontend/manifest.json", media_type="application/manifest+json")
+
 @app.get("/")
 async def root():
     with open("frontend/index.html", "r", encoding="utf-8") as f:
@@ -427,6 +469,10 @@ async def send_exchange_request(req: ExchangeRequest, user_id: str = Depends(get
         "INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)",
         (notif_id, req.matched_user_id, f"🤝 {sender_name} wants to exchange skills with you! (Match: {req.compatibility_score}%)")
     )
+    try:
+        send_push_to_user(req.matched_user_id, "New Exchange Request", f"{sender_name} wants to exchange skills with you!", {"url": "/", "type": "match_request"})
+    except Exception:
+        pass
     return {"status": "sent", "match_id": match_id}
 
 @app.post("/api/exchange/accept/{match_id}")
@@ -455,6 +501,10 @@ async def accept_exchange(match_id: str, user_id: str = Depends(get_current_user
         "INSERT INTO Notifications (id, user_id, content) VALUES (?, ?, ?)",
         (notif_id, match[0]["user1_id"], f"✅ {acceptor_name} accepted your exchange! 5 credits are now held in escrow.")
     )
+    try:
+        send_push_to_user(match[0]["user1_id"], "Request Accepted!", f"{acceptor_name} accepted your exchange! 5 credits held in escrow.", {"url": "/", "type": "exchange_accepted"})
+    except Exception:
+        pass
     return {"status": "in_progress", "credits_held": 5}
 
 @app.post("/api/exchange/{match_id}/confirm")
@@ -1276,7 +1326,7 @@ def get_ice_config(current_user_id: str = Depends(get_current_user_id)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="localhost", port=8000)
 
 
 # ══════════════════════════════════════════════════════════════

@@ -1,0 +1,16 @@
+
+{
+  "name": "SkillSwap Hyperlocal",
+  "short_name": "SkillSwap",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdf6e3",
+  "theme_color": "#b8860b",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3665/3665939.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

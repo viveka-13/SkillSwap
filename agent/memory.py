@@ -90,6 +90,16 @@ def init_db():
             post_type TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS PushSubscriptions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            endpoint TEXT NOT NULL,
+            p256dh_key TEXT NOT NULL,
+            auth_key TEXT NOT NULL,
+            user_agent TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES Users(id)
+        );
         CREATE TABLE IF NOT EXISTS Notifications (
             id TEXT PRIMARY KEY,
             user_id TEXT,

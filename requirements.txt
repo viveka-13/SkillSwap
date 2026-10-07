@@ -12,3 +12,5 @@ aiofiles>=23.0.0
 python-pptx>=0.6.23
 PyJWT>=2.8.0
 passlib[bcrypt]>=1.7.4
+
+pywebpush

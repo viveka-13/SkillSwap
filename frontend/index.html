@@ -452,6 +452,7 @@
       }
     } catch(e) { console.error('Error loading theme:', e); }
   </script>
+  <link rel="manifest" href="/manifest.json">
 </head>
 <body>
 
@@ -597,6 +598,18 @@
       
       <!-- DASHBOARD -->
       <div id="tab-dashboard" class="tab-content">
+
+      <!-- Push Notifications Toggle -->
+      <div id="pushSettings" style="display:none; padding: 16px; margin-bottom: 24px; background: rgba(184, 134, 11, 0.05); border-radius: 12px; border: 1px solid var(--border);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600; font-size: 1rem; margin-bottom: 4px;">Push Notifications</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">Get notified of new matches and messages.</div>
+          </div>
+          <button id="pushToggleBtn" onclick="togglePushNotifications()" style="width:auto; padding: 6px 12px; font-size: 0.85rem;">Enable</button>
+        </div>
+      </div>
+
         <h1 style="margin-bottom: 24px;" id="dashWelcome">Welcome back!</h1>
         <div class="flex gap-4">
           <div class="card stat-card" style="flex: 1;">
@@ -2325,6 +2338,131 @@ async function loadChatRooms() {
     } catch(e) {
       console.warn("localStorage not available, theme choice won't persist.");
     }
+  }
+
+  // --- Push Notifications Logic ---
+  let swRegistration = null;
+  let isPushSubscribed = false;
+  
+  if ('serviceWorker' in navigator && 'PushManager' in window) {
+      navigator.serviceWorker.register('/service-worker.js')
+      .then(function(swReg) {
+          swRegistration = swReg;
+          checkPushSubscription();
+      })
+      .catch(function(error) {
+          console.error('Service Worker Error', error);
+      });
+  }
+  
+  function checkPushSubscription() {
+      swRegistration.pushManager.getSubscription()
+      .then(function(subscription) {
+          isPushSubscribed = !(subscription === null);
+          updatePushUI();
+      });
+  }
+  
+  function updatePushUI() {
+      const pushSettings = document.getElementById('pushSettings');
+      const pushBtn = document.getElementById('pushToggleBtn');
+      if (pushSettings && pushBtn) {
+          pushSettings.style.display = 'block';
+          if (Notification.permission === 'denied') {
+              pushBtn.textContent = 'Blocked';
+              pushBtn.disabled = true;
+          } else if (isPushSubscribed) {
+              pushBtn.textContent = 'Disable';
+          } else {
+              pushBtn.textContent = 'Enable';
+          }
+      }
+  }
+  
+  function togglePushNotifications() {
+      if (isPushSubscribed) {
+          unsubscribePush();
+      } else {
+          subscribePush();
+      }
+  }
+  
+  function urlB64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+          outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+  }
+  
+  async function subscribePush() {
+      try {
+          const res = await fetch('/api/push/vapid-public-key');
+          if (!res.ok) {
+              toast("Push is not configured on the server.");
+              return;
+          }
+          const data = await res.json();
+          const applicationServerKey = urlB64ToUint8Array(data.vapidPublicKey);
+          
+          const subscription = await swRegistration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: applicationServerKey
+          });
+          
+          await fetch('/api/push/subscribe', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ' + token
+              },
+              body: JSON.stringify({
+                  endpoint: subscription.endpoint,
+                  keys: {
+                      p256dh: subscription.toJSON().keys.p256dh,
+                      auth: subscription.toJSON().keys.auth
+                  },
+                  user_agent: navigator.userAgent
+              })
+          });
+          
+          isPushSubscribed = true;
+          updatePushUI();
+          toast("Push notifications enabled!");
+      } catch (e) {
+          console.error("Failed to subscribe to push", e);
+          if (Notification.permission === 'denied') {
+              toast("Notifications are blocked in your browser settings.");
+          } else {
+              toast("Failed to enable push notifications.");
+          }
+          updatePushUI();
+      }
+  }
+  
+  async function unsubscribePush() {
+      try {
+          const subscription = await swRegistration.pushManager.getSubscription();
+          if (subscription) {
+              await fetch('/api/push/unsubscribe', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': 'Bearer ' + token
+                  },
+                  body: JSON.stringify({ endpoint: subscription.endpoint })
+              });
+              await subscription.unsubscribe();
+          }
+          isPushSubscribed = false;
+          updatePushUI();
+          toast("Push notifications disabled.");
+      } catch (e) {
+          console.error('Error unsubscribing', e);
+      }
   }
 </script>
 
