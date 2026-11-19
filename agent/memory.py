@@ -272,6 +272,54 @@ def init_db():
     except:
         pass  # Column already exists
 
+    # Group Skill Events tables
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS Events (
+            id TEXT PRIMARY KEY,
+            host_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            skill_name TEXT NOT NULL,
+            category TEXT,
+            level TEXT DEFAULT 'all',
+            mode TEXT NOT NULL,
+            city TEXT,
+            venue_name TEXT,
+            venue_address TEXT,
+            lat REAL,
+            lon REAL,
+            starts_at TIMESTAMP NOT NULL,
+            duration_minutes INTEGER DEFAULT 60,
+            capacity INTEGER NOT NULL,
+            credit_cost INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'open',
+            cancel_reason TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            FOREIGN KEY (host_id) REFERENCES Users(id)
+        );
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS EventParticipants (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            credits_held INTEGER DEFAULT 0,
+            waitlist_position INTEGER,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            reminder_sent INTEGER DEFAULT 0,
+            FOREIGN KEY (event_id) REFERENCES Events(id),
+            FOREIGN KEY (user_id) REFERENCES Users(id),
+            UNIQUE (event_id, user_id)
+        );
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_events_starts_at ON Events(starts_at);")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_events_status ON Events(status);")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_events_host_id ON Events(host_id);")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_event_parts_event ON EventParticipants(event_id, status);")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_event_parts_user ON EventParticipants(user_id);")
+
 
     # --- Message deletion columns (WhatsApp-style) ---
     for table in ["Messages", "VoiceMessages", "YoutubeLinks"]:

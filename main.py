@@ -1407,3 +1407,94 @@ async def gamification_leaderboard(city: str = "", user_id: str = Depends(get_cu
         entry["badge_count"] = badge_count[0]["cnt"] if badge_count else 0
 
     return {"leaderboard": leaderboard, "city": city}
+
+
+# ══════════════════════════════════════════════════════════════
+# GROUP SKILL EVENTS ENDPOINTS
+# ══════════════════════════════════════════════════════════════
+
+class CreateEventRequest(BaseModel):
+    title: str
+    description: str
+    skill_name: str
+    category: Optional[str] = None
+    level: Optional[str] = "all"
+    mode: str
+    city: Optional[str] = None
+    venue_name: Optional[str] = None
+    venue_address: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    starts_at: str
+    duration_minutes: Optional[int] = 60
+    capacity: int
+    credit_cost: Optional[int] = 0
+
+class CancelEventRequest(BaseModel):
+    cancel_reason: str
+
+@app.post("/api/events", status_code=201)
+async def api_create_event(req: CreateEventRequest, user_id: str = Depends(get_current_user_id)):
+    from agent.events import create_event
+    return create_event(user_id, req.dict())
+
+@app.get("/api/events")
+async def api_get_events(
+    city: Optional[str] = None,
+    category: Optional[str] = None,
+    skill: Optional[str] = None,
+    mode: Optional[str] = None,
+    max_km: Optional[float] = None,
+    free_only: bool = False,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    sort: str = "starts_at",
+    limit: int = 20,
+    offset: int = 0,
+    user_id: str = Depends(get_current_user_id)
+):
+    from agent.events import get_events
+    return get_events(
+        user_id=user_id,
+        city=city,
+        category=category,
+        skill=skill,
+        mode=mode,
+        max_km=max_km,
+        free_only=free_only,
+        from_date=from_date,
+        to_date=to_date,
+        sort=sort,
+        limit=limit,
+        offset=offset
+    )
+
+@app.get("/api/events/recommended")
+async def api_get_recommended_events(user_id: str = Depends(get_current_user_id)):
+    from agent.events import get_recommended_events
+    return get_recommended_events(user_id=user_id)
+
+@app.get("/api/events/mine")
+async def api_get_my_events(user_id: str = Depends(get_current_user_id)):
+    from agent.events import get_my_events
+    return get_my_events(user_id=user_id)
+
+@app.get("/api/events/{event_id}")
+async def api_get_event_detail(event_id: str, user_id: str = Depends(get_current_user_id)):
+    from agent.events import get_event_detail
+    return get_event_detail(event_id=event_id, user_id=user_id)
+
+@app.post("/api/events/{event_id}/join")
+async def api_join_event(event_id: str, user_id: str = Depends(get_current_user_id)):
+    from agent.events import join_event
+    return join_event(event_id=event_id, user_id=user_id)
+
+@app.post("/api/events/{event_id}/leave")
+async def api_leave_event(event_id: str, user_id: str = Depends(get_current_user_id)):
+    from agent.events import leave_event
+    return leave_event(event_id=event_id, user_id=user_id)
+
+@app.post("/api/events/{event_id}/cancel")
+async def api_cancel_event(event_id: str, req: CancelEventRequest, user_id: str = Depends(get_current_user_id)):
+    from agent.events import cancel_event
+    return cancel_event(event_id=event_id, host_id=user_id, cancel_reason=req.cancel_reason)
