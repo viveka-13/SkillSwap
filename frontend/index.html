@@ -584,6 +584,7 @@
       <div class="nav-item" onclick="switchTab('match', this)">🔍 AI Matchmaking</div>
       <div class="nav-item" onclick="switchTab('chat', this)">💬 Messages</div>
       <div class="nav-item" onclick="switchTab('admin', this); loadFraudFlags();">🛡️ Admin Panel</div>
+      <div class="nav-item" onclick="switchTab('events', this); loadEventsTab();">🎟️ Events</div>
       <div class="nav-bottom">
         
         <!-- Theme Toggle -->
@@ -759,6 +760,179 @@
         </div>
       </div>
 
+      
+      <!-- EVENTS TAB -->
+      <div id="tab-events" class="tab-content hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h1 style="margin: 0 0 6px 0;">Community Skill Events</h1>
+            <p style="color: var(--text-muted); margin: 0;">Learn together in group workshops, study circles, and masterclasses.</p>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn-events-subtab active" id="btnSubtabBrowse" onclick="switchEventsSubtab('browse')" style="width:auto; padding:8px 16px;">Browse Events</button>
+            <button class="btn-events-subtab" id="btnSubtabMy" onclick="switchEventsSubtab('my')" style="width:auto; padding:8px 16px; background:var(--card-bg); color:var(--text-main); border:1px solid var(--border);">My Events</button>
+            <button class="btn-events-subtab" id="btnSubtabCreate" onclick="switchEventsSubtab('create')" style="width:auto; padding:8px 16px; background:var(--primary); color:white;">+ Host an Event</button>
+          </div>
+        </div>
+
+        <!-- Safety Notice Banner -->
+        <div style="background: rgba(184, 134, 11, 0.08); border: 1px solid var(--border); border-left: 4px solid var(--primary); padding: 14px 18px; border-radius: 10px; margin-bottom: 24px; display:flex; align-items:flex-start; gap:12px;">
+          <div style="font-size: 1.4rem; line-height: 1;">🛡️</div>
+          <div style="font-size: 0.88rem; line-height: 1.4;">
+            <strong>Meet in a Public Place:</strong> For your personal safety, always host and attend in-person skill events in public, well-lit spaces (such as public libraries, cafes, community halls, or campus centers). Exact addresses remain private and are only revealed to confirmed attendees.
+          </div>
+        </div>
+
+        <!-- SUBTAB 1: BROWSE EVENTS -->
+        <div id="eventsSubtab-browse">
+          <!-- Recommended Section -->
+          <div id="eventsRecommendedContainer" style="margin-bottom: 28px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px;">
+              <h3 style="margin:0; font-size:1.15rem; display:flex; align-items:center; gap:8px;">✨ Recommended for You</h3>
+            </div>
+            <div id="eventsRecommendedList" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:16px;">
+              <p style="color:var(--text-muted);">Finding recommendations based on skills you want to learn...</p>
+            </div>
+          </div>
+
+          <!-- Filter & Search Bar -->
+          <div class="card" style="padding:16px; margin-bottom:24px;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) 100px; gap:12px; align-items:center;">
+              <input type="text" id="eventSearchQuery" placeholder="Search skill or title..." onkeyup="if(event.key==='Enter') filterEvents()" style="padding:10px 14px; margin:0;">
+              <select id="eventFilterMode" onchange="filterEvents()" style="padding:10px 14px; margin:0;">
+                <option value="">All Modes (Online & In-Person)</option>
+                <option value="in_person">In-Person Only</option>
+                <option value="online">Online Only</option>
+              </select>
+              <select id="eventSortBy" onchange="filterEvents()" style="padding:10px 14px; margin:0;">
+                <option value="starts_at">Sort by Date (Soonest)</option>
+                <option value="distance">Sort by Distance (Nearest)</option>
+              </select>
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.9rem; margin:0; user-select:none;">
+                <input type="checkbox" id="eventFreeOnly" onchange="filterEvents()" style="width:18px; height:18px; margin:0;"> Free Only
+              </label>
+              <button onclick="filterEvents()" style="padding:10px; margin:0;">Filter</button>
+            </div>
+          </div>
+
+          <!-- All Events Grid -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 style="margin:0; font-size:1.15rem;">Upcoming Events (<span id="eventsTotalCount">0</span>)</h3>
+          </div>
+          <div id="eventsGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:20px;">
+            <p style="color:var(--text-muted);">Loading upcoming events...</p>
+          </div>
+        </div>
+
+        <!-- SUBTAB 2: MY EVENTS -->
+        <div id="eventsSubtab-my" class="hidden">
+          <h3 style="margin-top:0;">Hosted by You</h3>
+          <div id="myHostedEvents" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px; margin-bottom:32px;">
+            <p style="color:var(--text-muted);">Loading hosted events...</p>
+          </div>
+
+          <h3>Events You Joined</h3>
+          <div id="myJoinedEvents" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+            <p style="color:var(--text-muted);">Loading joined events...</p>
+          </div>
+        </div>
+
+        <!-- SUBTAB 3: HOST AN EVENT FORM -->
+        <div id="eventsSubtab-create" class="hidden">
+          <div class="card" style="max-width: 720px; margin: 0 auto; padding: 24px;">
+            <h2 style="margin-top:0; margin-bottom:8px;">Host a Group Skill Event</h2>
+            <p style="color:var(--text-muted); margin-bottom: 20px;">Share your knowledge with multiple eager learners at once.</p>
+
+            <form id="createEventForm" onsubmit="handleCreateEvent(event)">
+              <div style="margin-bottom:16px;">
+                <label style="font-weight:600; display:block; margin-bottom:6px;">Event Title *</label>
+                <input type="text" id="evFormTitle" required minlength="3" maxlength="100" placeholder="e.g. Master Artisan Pasta Making from Scratch" style="margin:0;">
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+                <div>
+                  <label style="font-weight:600; display:block; margin-bottom:6px;">Skill Being Taught *</label>
+                  <input type="text" id="evFormSkill" required placeholder="e.g. Italian Cooking, React, Spanish" style="margin:0;">
+                </div>
+                <div>
+                  <label style="font-weight:600; display:block; margin-bottom:6px;">Category</label>
+                  <input type="text" id="evFormCategory" placeholder="e.g. Culinary, Technology, Languages" style="margin:0;">
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+                <div>
+                  <label style="font-weight:600; display:block; margin-bottom:6px;">Difficulty Level</label>
+                  <select id="evFormLevel" style="margin:0;">
+                    <option value="all">All Levels Welcome</option>
+                    <option value="beginner">Beginner</option>
+                    <option value="intermediate">Intermediate</option>
+                    <option value="advanced">Advanced</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-weight:600; display:block; margin-bottom:6px;">Delivery Mode *</label>
+                  <select id="evFormMode" onchange="toggleEventModeFields()" style="margin:0;">
+                    <option value="in_person">In-Person (Meet in Public Venue)</option>
+                    <option value="online">Online (Video Workshop)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- In-person venue fields -->
+              <div id="evInPersonFields" style="margin-bottom:16px; padding:14px; background:var(--yellow-soft); border-radius:10px;">
+                <div style="font-weight:600; margin-bottom:8px; font-size:0.92rem;">📍 Venue Details (In-Person)</div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:10px;">
+                  <div>
+                    <label style="font-size:0.85rem; display:block; margin-bottom:4px;">Public Venue Name *</label>
+                    <input type="text" id="evFormVenueName" placeholder="e.g. Central Library Study Hall B, Blue Tokai Cafe" style="margin:0;">
+                  </div>
+                  <div>
+                    <label style="font-size:0.85rem; display:block; margin-bottom:4px;">City</label>
+                    <input type="text" id="evFormCity" placeholder="e.g. Bangalore" style="margin:0;">
+                  </div>
+                </div>
+                <div>
+                  <label style="font-size:0.85rem; display:block; margin-bottom:4px;">Exact Address (Private — Revealed to Confirmed Attendees Only)</label>
+                  <input type="text" id="evFormVenueAddress" placeholder="e.g. 4th Floor, 100 Feet Rd, Indiranagar" style="margin:0;">
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
+                <div>
+                  <label style="font-weight:600; display:block; margin-bottom:6px;">Date & Time *</label>
+                  <input type="datetime-local" id="evFormStartsAt" required style="margin:0;">
+                </div>
+                <div>
+                  <label style="font-weight:600; display:block; margin-bottom:6px;">Duration (min)</label>
+                  <input type="number" id="evFormDuration" value="60" min="15" max="300" style="margin:0;">
+                </div>
+                <div>
+                  <label style="font-weight:600; display:block; margin-bottom:6px;">Capacity *</label>
+                  <input type="number" id="evFormCapacity" value="5" min="2" max="30" required style="margin:0;">
+                </div>
+                <div>
+                  <label style="font-weight:600; display:block; margin-bottom:6px;">Cost (Credits)</label>
+                  <input type="number" id="evFormCost" value="0" min="0" max="10" style="margin:0;">
+                </div>
+              </div>
+
+              <div style="margin-bottom:20px;">
+                <label style="font-weight:600; display:block; margin-bottom:6px;">Event Description * (Up to 1000 characters)</label>
+                <textarea id="evFormDescription" required maxlength="1000" rows="4" placeholder="What will attendees learn? What should they bring? Keep it encouraging and clear." style="width:100%; border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--card-bg); color:var(--text-main); font-family:inherit;"></textarea>
+              </div>
+
+              <div id="evCreateError" style="color:var(--danger); margin-bottom:16px; font-weight:500; display:none;"></div>
+
+              <div style="display:flex; justify-content:flex-end; gap:12px;">
+                <button type="button" onclick="switchEventsSubtab('browse')" style="background:var(--card-bg); color:var(--text-main); border:1px solid var(--border); width:auto;">Cancel</button>
+                <button type="submit" id="btnSubmitCreateEvent" style="width:auto; padding:10px 24px; background:var(--primary); color:white;">Publish Event</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
       <!-- ADMIN -->
       <div id="tab-admin" class="tab-content hidden">
         <h1 style="margin-bottom: 8px;">Admin Control Panel</h1>
@@ -775,6 +949,68 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  
+  <!-- Event Detail Modal -->
+  <div id="eventDetailModal" class="upload-progress hidden" style="z-index: 1050; padding:20px; overflow-y:auto;" onclick="if(event.target===this) closeEventModal()">
+    <div class="card" style="max-width: 640px; width: 100%; max-height: 90vh; overflow-y:auto; padding: 24px; position:relative; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
+      <button onclick="closeEventModal()" style="position:absolute; top:16px; right:16px; background:transparent; border:none; font-size:1.4rem; cursor:pointer; color:var(--text-muted); width:auto; padding:4px 8px;">✕</button>
+
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+        <span id="evModalModeBadge" class="badge" style="background:var(--primary); color:white;"></span>
+        <span id="evModalLevelBadge" class="badge" style="background:var(--yellow-soft); color:var(--primary);"></span>
+        <span id="evModalCostBadge" class="badge" style="background:var(--card-bg); border:1px solid var(--border);"></span>
+        <span id="evModalStatusBadge" class="badge"></span>
+      </div>
+
+      <h2 id="evModalTitle" style="margin-top:4px; margin-bottom:8px; font-size:1.5rem; line-height:1.2;"></h2>
+      
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border);">
+        <div style="width:40px; height:40px; border-radius:50%; background:var(--primary); color:white; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:1.1rem;" id="evModalHostAvatar">H</div>
+        <div>
+          <div style="font-weight:600;" id="evModalHostName">Host</div>
+          <div style="font-size:0.82rem; color:var(--text-muted);" id="evModalHostScore">⭐ 5.0 Trust Score</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <div style="font-size:0.85rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">Date & Time</div>
+        <div style="font-weight:500; font-size:1rem;" id="evModalDateTime"></div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <div style="font-size:0.85rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">Location / Venue</div>
+        <div style="font-weight:500;" id="evModalVenueName"></div>
+        <div id="evModalVenueAddressNotice" style="margin-top:4px; font-size:0.88rem;"></div>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <div style="font-size:0.85rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">About This Event</div>
+        <p id="evModalDescription" style="margin:0; line-height:1.5; color:var(--text-main); white-space:pre-wrap;"></p>
+      </div>
+
+      <!-- Attendees Box -->
+      <div style="background:var(--yellow-soft); border-radius:10px; padding:14px; margin-bottom:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div style="font-weight:600; font-size:0.92rem;">👥 Attendees (<span id="evModalAttendeeCount">0/0</span>)</div>
+          <div style="font-size:0.82rem; color:var(--text-muted);" id="evModalSpotsLeft"></div>
+        </div>
+        <div id="evModalParticipantsList" style="display:flex; flex-wrap:wrap; gap:8px;">
+          <!-- participant badges -->
+        </div>
+      </div>
+
+      <!-- Public Safety reminder inside modal -->
+      <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:20px; display:flex; align-items:center; gap:6px;">
+        <span>🛡️</span> <span>Always follow public safety guidelines for in-person workshops.</span>
+      </div>
+
+      <!-- Action Buttons Row -->
+      <div id="evModalActionContainer" style="display:flex; gap:10px; justify-content:flex-end;">
+        <!-- Injected via JavaScript based on status -->
+      </div>
     </div>
   </div>
 
@@ -856,6 +1092,7 @@
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
     document.getElementById('tab-' + tabId).classList.remove('hidden');
     if (tabId === 'chat') loadChatRooms();
+    else if (tabId === 'events') loadEventsTab();
     else clearInterval(chatPollInterval);
   }
 
@@ -2464,6 +2701,473 @@ async function loadChatRooms() {
           console.error('Error unsubscribing', e);
       }
   }
+
+
+// ══════════════════════════════════════════════════════════════
+  // GROUP SKILL EVENTS LOGIC (Part A)
+  // ══════════════════════════════════════════════════════════════
+  let userWalletBalance = 0;
+  let cachedMyEvents = null;
+  let activeEventDetail = null;
+
+  function switchEventsSubtab(subtabId) {
+    document.querySelectorAll('.btn-events-subtab').forEach(b => {
+      b.classList.remove('active');
+      b.style.background = 'var(--card-bg)';
+      b.style.color = 'var(--text-main)';
+      b.style.border = '1px solid var(--border)';
+    });
+    const activeBtn = document.getElementById('btnSubtab' + subtabId.charAt(0).toUpperCase() + subtabId.slice(1));
+    if (activeBtn) {
+      activeBtn.classList.add('active');
+      activeBtn.style.background = (subtabId === 'create') ? 'var(--primary)' : 'var(--panel-bg)';
+      activeBtn.style.color = (subtabId === 'create') ? 'white' : 'var(--primary)';
+    }
+
+    document.getElementById('eventsSubtab-browse').classList.add('hidden');
+    document.getElementById('eventsSubtab-my').classList.add('hidden');
+    document.getElementById('eventsSubtab-create').classList.add('hidden');
+    document.getElementById('eventsSubtab-' + subtabId).classList.remove('hidden');
+
+    if (subtabId === 'browse') {
+      loadRecommendedEvents();
+      filterEvents();
+    } else if (subtabId === 'my') {
+      loadMyEvents();
+    } else if (subtabId === 'create') {
+      // Set min starts_at to now + 65 minutes
+      const nowPlusHour = new Date(Date.now() + 65 * 60000);
+      const isoLocal = new Date(nowPlusHour.getTime() - (nowPlusHour.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+      const startsInput = document.getElementById('evFormStartsAt');
+      if (startsInput) {
+        startsInput.min = isoLocal;
+        if (!startsInput.value) startsInput.value = isoLocal;
+      }
+    }
+  }
+
+  function toggleEventModeFields() {
+    const mode = document.getElementById('evFormMode').value;
+    const fields = document.getElementById('evInPersonFields');
+    if (fields) {
+      fields.style.display = (mode === 'in_person') ? 'block' : 'none';
+    }
+  }
+
+  async function loadEventsTab() {
+    // Fetch latest user wallet balance
+    try {
+      const res = await fetch('/api/dashboard', { headers: { 'Authorization': 'Bearer ' + token } });
+      if (res.ok) {
+        const d = await res.json();
+        userWalletBalance = d.wallet_balance || 0;
+        currentUserId = d.id;
+      }
+    } catch(e) { console.error("Error loading profile for events:", e); }
+
+    switchEventsSubtab('browse');
+  }
+
+  async function loadRecommendedEvents() {
+    const container = document.getElementById('eventsRecommendedList');
+    try {
+      const res = await fetch('/api/events/recommended', { headers: { 'Authorization': 'Bearer ' + token } });
+      if (!res.ok) throw new Error("Failed to fetch recommendations");
+      const recs = await res.json();
+
+      if (!recs || recs.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">No upcoming recommendations right now.</p>';
+        return;
+      }
+
+      container.innerHTML = recs.slice(0, 3).map(ev => {
+        const isFree = (ev.credit_cost === 0);
+        const costLabel = isFree ? '<span style="color:var(--success); font-weight:600;">Free</span>' : `🪙 ${ev.credit_cost} cr`;
+        const distLabel = ev.mode === 'online' ? '🌐 Online' : (ev.distance_km != null ? `📍 ${ev.distance_km} km` : '📍 In-Person');
+        return `
+          <div class="card" style="padding:16px; border:1px solid var(--border); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
+            <div style="background:var(--yellow-soft); color:var(--primary); font-size:0.75rem; font-weight:bold; padding:4px 8px; border-radius:6px; margin-bottom:8px; display:inline-block; align-self:flex-start;">
+              💡 ${ev.reason || 'Recommended'}
+            </div>
+            <h4 style="margin:0 0 6px 0; font-size:1.05rem; line-height:1.3;">${escapeHtml(ev.title)}</h4>
+            <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:12px;">
+              By ${escapeHtml(ev.host.name)} (⭐ ${ev.host.trust_score.toFixed(1)}) • ${distLabel} • ${costLabel}
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:auto;">
+              <span style="font-size:0.8rem; color:var(--text-muted);">${ev.spots_left} spots left</span>
+              <button onclick="openEventModal('${ev.id}')" style="width:auto; padding:6px 14px; font-size:0.82rem;">View & Join</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    } catch(e) {
+      container.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">No recommendations available right now.</p>';
+    }
+  }
+
+  async function filterEvents() {
+    const grid = document.getElementById('eventsGrid');
+    const query = (document.getElementById('eventSearchQuery').value || '').trim();
+    const mode = document.getElementById('eventFilterMode').value;
+    const sort = document.getElementById('eventSortBy').value;
+    const freeOnly = document.getElementById('eventFreeOnly').checked;
+
+    let url = `/api/events?sort=${encodeURIComponent(sort)}&limit=40`;
+    if (query) url += `&skill=${encodeURIComponent(query)}`;
+    if (mode) url += `&mode=${encodeURIComponent(mode)}`;
+    if (freeOnly) url += `&free_only=true`;
+
+    try {
+      const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+      if (!res.ok) throw new Error("Failed to load events");
+      const data = await res.json();
+      const events = data.events || [];
+      document.getElementById('eventsTotalCount').textContent = data.total || events.length;
+
+      if (events.length === 0) {
+        grid.innerHTML = '<div class="card" style="grid-column: 1/-1; text-align:center; padding:32px;"><p style="color:var(--text-muted); margin:0;">No upcoming events matched your filter. Be the first to host one!</p></div>';
+        return;
+      }
+
+      grid.innerHTML = events.map(ev => renderEventCard(ev)).join('');
+    } catch(e) {
+      grid.innerHTML = '<p style="color:var(--danger);">Error loading events. Please try again.</p>';
+    }
+  }
+
+  function renderEventCard(ev) {
+    const isFree = (ev.credit_cost === 0);
+    const costBadge = isFree ? '<span class="badge" style="background:#e8f5e9; color:#2e7d32; font-weight:bold;">Free</span>' : `<span class="badge" style="background:rgba(184,134,11,0.15); color:var(--primary); font-weight:bold;">🪙 ${ev.credit_cost} credits</span>`;
+    const modeBadge = ev.mode === 'online' ? '<span class="badge" style="background:#e3f2fd; color:#1565c0;">🌐 Online</span>' : `<span class="badge" style="background:#fff3e0; color:#e65100;">📍 In-Person${ev.distance_km != null ? ' (' + ev.distance_km + ' km)' : ''}</span>`;
+    const dt = new Date(ev.starts_at);
+    const dateFormatted = dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    let statusPill = '';
+    if (ev.status === 'full') {
+      statusPill = '<span class="badge" style="background:#ffebee; color:#c62828;">FULL</span>';
+    } else {
+      statusPill = `<span style="font-size:0.8rem; color:var(--text-muted);">${ev.spots_left} / ${ev.capacity} spots left</span>`;
+    }
+
+    let myBadge = '';
+    if (ev.my_status === 'confirmed') {
+      myBadge = '<span class="badge" style="background:var(--success); color:white;">Joined</span>';
+    } else if (ev.my_status === 'waitlisted') {
+      myBadge = '<span class="badge" style="background:#ff9800; color:white;">Waitlisted</span>';
+    }
+
+    return `
+      <div class="card" style="padding:20px; display:flex; flex-direction:column; justify-content:space-between; transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap;">
+            <div style="display:flex; gap:6px;">${modeBadge} ${costBadge}</div>
+            <div>${myBadge || statusPill}</div>
+          </div>
+          <h3 style="margin: 0 0 6px 0; font-size:1.15rem; line-height:1.3;">${escapeHtml(ev.title)}</h3>
+          <div style="font-size:0.85rem; color:var(--primary); font-weight:600; margin-bottom:10px;">🎓 Skill: ${escapeHtml(ev.skill_name)}</div>
+          <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px;">📅 ${dateFormatted} (${ev.duration_minutes}m)</div>
+          <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px;">👤 Host: ${escapeHtml(ev.host.name)} (⭐ ${ev.host.trust_score.toFixed(1)})</div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; pt:8px; border-top:1px solid var(--border);">
+          <span style="font-size:0.8rem; color:var(--text-muted);">${ev.confirmed_count} Confirmed</span>
+          <button onclick="openEventModal('${ev.id}')" style="width:auto; padding:6px 16px; font-size:0.85rem;">View Details</button>
+        </div>
+      </div>
+    `;
+  }
+
+  async function openEventModal(eventId) {
+    const modal = document.getElementById('eventDetailModal');
+    modal.classList.remove('hidden');
+
+    try {
+      const res = await fetch('/api/events/' + eventId, { headers: { 'Authorization': 'Bearer ' + token } });
+      if (!res.ok) throw new Error("Failed to load event details");
+      const ev = await res.json();
+      activeEventDetail = ev;
+
+      // Badges
+      document.getElementById('evModalModeBadge').textContent = (ev.mode === 'online') ? '🌐 Online' : ('📍 In-Person' + (ev.distance_km != null ? ` (${ev.distance_km} km)` : ''));
+      document.getElementById('evModalLevelBadge').textContent = 'Level: ' + (ev.level || 'All');
+      document.getElementById('evModalCostBadge').textContent = (ev.credit_cost === 0) ? 'Free' : `🪙 ${ev.credit_cost} credits`;
+
+      const statusBadge = document.getElementById('evModalStatusBadge');
+      if (ev.status === 'full') {
+        statusBadge.textContent = 'FULL';
+        statusBadge.style.background = '#ffebee';
+        statusBadge.style.color = '#c62828';
+      } else if (ev.status === 'cancelled') {
+        statusBadge.textContent = 'CANCELLED';
+        statusBadge.style.background = '#e0e0e0';
+        statusBadge.style.color = '#616161';
+      } else {
+        statusBadge.textContent = 'OPEN';
+        statusBadge.style.background = '#e8f5e9';
+        statusBadge.style.color = '#2e7d32';
+      }
+
+      document.getElementById('evModalTitle').textContent = ev.title;
+      document.getElementById('evModalHostName').textContent = ev.host.name + (ev.is_host ? ' (You)' : '');
+      document.getElementById('evModalHostScore').textContent = `⭐ ${ev.host.trust_score.toFixed(1)} Trust Score`;
+      document.getElementById('evModalHostAvatar').textContent = ev.host.name.charAt(0).toUpperCase();
+
+      const dt = new Date(ev.starts_at);
+      document.getElementById('evModalDateTime').textContent = dt.toLocaleString(undefined, {
+        weekday: 'long', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      }) + ` (${ev.duration_minutes} minutes)`;
+
+      document.getElementById('evModalVenueName').textContent = (ev.mode === 'online') ? 'Online Video Meeting' : (ev.venue_name || 'Public Location') + (ev.city ? `, ${ev.city}` : '');
+
+      const addressNotice = document.getElementById('evModalVenueAddressNotice');
+      if (ev.mode === 'online') {
+        addressNotice.innerHTML = '<span style="color:var(--text-muted);">Link will be shared in session.</span>';
+      } else if (ev.venue_address) {
+        addressNotice.innerHTML = `<span style="color:var(--success); font-weight:600;">📍 Private Address:</span> ${escapeHtml(ev.venue_address)}`;
+      } else {
+        addressNotice.innerHTML = `<span style="color:var(--text-muted); font-style:italic;">🔒 Exact address is private and will be revealed once you are a confirmed attendee.</span>`;
+      }
+
+      document.getElementById('evModalDescription').textContent = ev.description;
+      document.getElementById('evModalAttendeeCount').textContent = `${ev.confirmed_count} / ${ev.capacity}`;
+      document.getElementById('evModalSpotsLeft').textContent = `${ev.spots_left} spots left`;
+
+      // Participants list
+      const partContainer = document.getElementById('evModalParticipantsList');
+      if (ev.participants && ev.participants.length > 0) {
+        partContainer.innerHTML = ev.participants.map(p => {
+          let stColor = '#2e7d32';
+          if (p.status === 'waitlisted') stColor = '#ff9800';
+          if (p.status === 'cancelled') stColor = '#757575';
+          return `<span class="badge" style="background:var(--card-bg); border:1px solid var(--border); font-size:0.8rem;">
+            ${escapeHtml(p.name)} <span style="color:${stColor}; font-weight:bold;">(${p.status}${p.waitlist_position ? ' #' + p.waitlist_position : ''})</span>
+          </span>`;
+        }).join('');
+      } else {
+        partContainer.innerHTML = '<span style="color:var(--text-muted); font-size:0.85rem;">No attendees confirmed yet.</span>';
+      }
+
+      // Actions row
+      renderEventModalActions(ev);
+
+    } catch(e) {
+      toast("Error loading event: " + e.message);
+      closeEventModal();
+    }
+  }
+
+  function renderEventModalActions(ev) {
+    const container = document.getElementById('evModalActionContainer');
+    container.innerHTML = '';
+
+    if (ev.status === 'cancelled') {
+      container.innerHTML = '<span style="color:var(--danger); font-weight:600;">This event has been cancelled.</span>';
+      return;
+    }
+
+    if (ev.is_host) {
+      // Host Controls
+      container.innerHTML = `
+        <button onclick="cancelEventPrompt('${ev.id}')" style="background:var(--danger); color:white; width:auto;">Cancel This Event</button>
+      `;
+      return;
+    }
+
+    if (ev.my_status === 'confirmed') {
+      container.innerHTML = `
+        <button onclick="leaveEventPrompt('${ev.id}')" style="background:#e53935; color:white; width:auto;">Leave Event (Cancel Spot)</button>
+      `;
+      return;
+    }
+
+    if (ev.my_status === 'waitlisted') {
+      container.innerHTML = `
+        <button onclick="leaveEventPrompt('${ev.id}')" style="background:#ff9800; color:white; width:auto;">Leave Waitlist</button>
+      `;
+      return;
+    }
+
+    // User is NOT joined
+    const cost = ev.credit_cost || 0;
+    const canAfford = (cost === 0 || userWalletBalance >= cost);
+
+    if (ev.status === 'full') {
+      container.innerHTML = `
+        <button onclick="joinEventAction('${ev.id}')" style="background:#ff9800; color:white; width:auto;">⏳ Join Waitlist</button>
+      `;
+      return;
+    }
+
+    if (!canAfford) {
+      container.innerHTML = `
+        <button disabled style="opacity:0.6; cursor:not-allowed; background:#888; color:white; width:auto;">
+          🪙 Need ${cost} Credits (You have ${userWalletBalance})
+        </button>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <button onclick="joinEventAction('${ev.id}')" style="background:var(--success); color:white; width:auto;">
+        ✅ Join Event (${cost > 0 ? cost + ' credits held' : 'Free'})
+      </button>
+    `;
+  }
+
+  function closeEventModal() {
+    document.getElementById('eventDetailModal').classList.add('hidden');
+    activeEventDetail = null;
+  }
+
+  async function joinEventAction(eventId) {
+    try {
+      const res = await fetch(`/api/events/${eventId}/join`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to join event");
+
+      if (data.status === 'confirmed') {
+        toast("🎉 You're confirmed for the event!");
+      } else {
+        toast(`⏳ Added to waitlist at position #${data.waitlist_position}!`);
+      }
+      openEventModal(eventId);
+      filterEvents();
+      // Update balance
+      if (data.credits_held > 0) userWalletBalance -= data.credits_held;
+    } catch(e) {
+      toast("Error: " + e.message);
+    }
+  }
+
+  async function leaveEventPrompt(eventId) {
+    if (!confirm("Are you sure you want to leave this event? If confirmed, any held credits will be refunded to your wallet.")) return;
+    try {
+      const res = await fetch(`/api/events/${eventId}/leave`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to leave event");
+
+      toast("You have left the event. Held credits refunded.");
+      closeEventModal();
+      filterEvents();
+      loadMyEvents();
+    } catch(e) {
+      toast("Error: " + e.message);
+    }
+  }
+
+  async function cancelEventPrompt(eventId) {
+    const reason = prompt("Enter cancellation reason (required, min 3 characters):");
+    if (!reason || reason.trim().length < 3) {
+      alert("Cancellation reason must be at least 3 characters.");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/events/${eventId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ cancel_reason: reason.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to cancel event");
+
+      toast("Event cancelled. All attendees refunded.");
+      closeEventModal();
+      filterEvents();
+      loadMyEvents();
+    } catch(e) {
+      toast("Error: " + e.message);
+    }
+  }
+
+  async function handleCreateEvent(e) {
+    e.preventDefault();
+    const errBox = document.getElementById('evCreateError');
+    errBox.style.display = 'none';
+
+    const title = document.getElementById('evFormTitle').value.trim();
+    const skill_name = document.getElementById('evFormSkill').value.trim();
+    const category = document.getElementById('evFormCategory').value.trim();
+    const level = document.getElementById('evFormLevel').value;
+    const mode = document.getElementById('evFormMode').value;
+    const venue_name = document.getElementById('evFormVenueName').value.trim();
+    const venue_address = document.getElementById('evFormVenueAddress').value.trim();
+    const city = document.getElementById('evFormCity').value.trim();
+    const starts_at = document.getElementById('evFormStartsAt').value;
+    const duration_minutes = parseInt(document.getElementById('evFormDuration').value, 10);
+    const capacity = parseInt(document.getElementById('evFormCapacity').value, 10);
+    const credit_cost = parseInt(document.getElementById('evFormCost').value, 10);
+    const description = document.getElementById('evFormDescription').value.trim();
+
+    const payload = {
+      title, skill_name, category, level, mode, venue_name, venue_address, city,
+      starts_at, duration_minutes, capacity, credit_cost, description
+    };
+
+    const submitBtn = document.getElementById('btnSubmitCreateEvent');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Publishing...';
+
+    try {
+      const res = await fetch('/api/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to create event");
+
+      toast("🎉 Event created successfully!");
+      document.getElementById('createEventForm').reset();
+      switchEventsSubtab('browse');
+    } catch(err) {
+      errBox.textContent = err.message;
+      errBox.style.display = 'block';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Publish Event';
+    }
+  }
+
+  async function loadMyEvents() {
+    const hostedContainer = document.getElementById('myHostedEvents');
+    const joinedContainer = document.getElementById('myJoinedEvents');
+    try {
+      const res = await fetch('/api/events/mine', { headers: { 'Authorization': 'Bearer ' + token } });
+      if (!res.ok) throw new Error("Failed to load your events");
+      const data = await res.json();
+
+      // Hosted
+      const hostedList = [...(data.hosted.upcoming || []), ...(data.hosted.past || [])];
+      if (hostedList.length === 0) {
+        hostedContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">You have not hosted any events yet.</p>';
+      } else {
+        hostedContainer.innerHTML = hostedList.map(ev => renderEventCard(ev)).join('');
+      }
+
+      // Joined
+      const joinedList = [...(data.joined.upcoming || []), ...(data.joined.past || [])];
+      if (joinedList.length === 0) {
+        joinedContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">You have not joined any events yet.</p>';
+      } else {
+        joinedContainer.innerHTML = joinedList.map(ev => renderEventCard(ev)).join('');
+      }
+    } catch(e) {
+      hostedContainer.innerHTML = '<p style="color:var(--danger);">Error loading your hosted events.</p>';
+      joinedContainer.innerHTML = '<p style="color:var(--danger);">Error loading your joined events.</p>';
+    }
+  }
+
 </script>
 
 </body>

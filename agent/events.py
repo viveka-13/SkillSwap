@@ -116,6 +116,21 @@ def get_user_profile(user_id: str) -> Optional[Dict[str, Any]]:
     return rows[0] if rows else None
 
 
+def run_moderation(text: str) -> dict:
+    """Run moderation using chat_moderation tool safely."""
+    try:
+        from agent.tools import chat_moderation
+        if hasattr(chat_moderation, "func"):
+            return chat_moderation.func(text)
+        elif hasattr(chat_moderation, "invoke"):
+            return chat_moderation.invoke({"message": text})
+        elif callable(chat_moderation):
+            return chat_moderation(text)
+    except Exception as e:
+        logger.warning(f"Moderation check skipped: {e}")
+    return {"is_flagged": False}
+
+
 # ---------------------------------------------------------------------------
 # Core Event Service Functions
 # ---------------------------------------------------------------------------
@@ -210,7 +225,7 @@ def create_event(host_id: str, data: dict) -> dict:
 
     # 4. Moderation check
     try:
-        mod_result = chat_moderation(f"{title}\n{description}")
+        mod_result = run_moderation(f"{title}\n{description}")
         if mod_result.get("is_flagged"):
             raise HTTPException(status_code=422, detail="Event title or description was flagged by automated content moderation.")
     except HTTPException:
