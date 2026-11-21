@@ -1324,10 +1324,6 @@ def get_ice_config(current_user_id: str = Depends(get_current_user_id)):
         
     return {"iceServers": ice_servers}
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="localhost", port=8000)
-
 
 # ══════════════════════════════════════════════════════════════
 # GAMIFICATION ENDPOINTS
@@ -1444,29 +1440,51 @@ async def api_get_events(
     category: Optional[str] = None,
     skill: Optional[str] = None,
     mode: Optional[str] = None,
-    max_km: Optional[float] = None,
-    free_only: bool = False,
+    max_km: Optional[str] = None,
+    free_only: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
-    sort: str = "starts_at",
-    limit: int = 20,
-    offset: int = 0,
+    sort: Optional[str] = "starts_at",
+    limit: Optional[int] = 20,
+    offset: Optional[int] = 0,
     user_id: str = Depends(get_current_user_id)
 ):
     from agent.events import get_events
+
+    city_val = city.strip() if (city and city.strip()) else None
+    category_val = category.strip() if (category and category.strip()) else None
+    skill_val = skill.strip() if (skill and skill.strip()) else None
+    mode_val = mode.strip() if (mode and mode.strip()) else None
+    from_date_val = from_date.strip() if (from_date and from_date.strip()) else None
+    to_date_val = to_date.strip() if (to_date and to_date.strip()) else None
+
+    parsed_max_km = None
+    if max_km is not None and str(max_km).strip():
+        try:
+            parsed_max_km = float(max_km)
+        except ValueError:
+            parsed_max_km = None
+
+    is_free_only = False
+    if free_only is not None:
+        if isinstance(free_only, bool):
+            is_free_only = free_only
+        elif str(free_only).strip().lower() in ("true", "1", "yes"):
+            is_free_only = True
+
     return get_events(
         user_id=user_id,
-        city=city,
-        category=category,
-        skill=skill,
-        mode=mode,
-        max_km=max_km,
-        free_only=free_only,
-        from_date=from_date,
-        to_date=to_date,
-        sort=sort,
-        limit=limit,
-        offset=offset
+        city=city_val,
+        category=category_val,
+        skill=skill_val,
+        mode=mode_val,
+        max_km=parsed_max_km,
+        free_only=is_free_only,
+        from_date=from_date_val,
+        to_date=to_date_val,
+        sort=sort or "starts_at",
+        limit=limit or 20,
+        offset=offset or 0
     )
 
 @app.get("/api/events/recommended")
@@ -1498,3 +1516,8 @@ async def api_leave_event(event_id: str, user_id: str = Depends(get_current_user
 async def api_cancel_event(event_id: str, req: CancelEventRequest, user_id: str = Depends(get_current_user_id)):
     from agent.events import cancel_event
     return cancel_event(event_id=event_id, host_id=user_id, cancel_reason=req.cancel_reason)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="localhost", port=8000)

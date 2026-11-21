@@ -295,6 +295,21 @@ def get_events(
     user_lat = user.get("lat") if user else None
     user_lon = user.get("lon") if user else None
 
+    # Sanitize filter values
+    city = city.strip() if (city and str(city).strip()) else None
+    category = category.strip() if (category and str(category).strip()) else None
+    skill = skill.strip() if (skill and str(skill).strip()) else None
+    mode = mode.strip() if (mode and str(mode).strip()) else None
+    from_date = from_date.strip() if (from_date and str(from_date).strip()) else None
+    to_date = to_date.strip() if (to_date and str(to_date).strip()) else None
+    if max_km is not None and str(max_km).strip():
+        try:
+            max_km = float(max_km)
+        except ValueError:
+            max_km = None
+    else:
+        max_km = None
+
     # Fetch all candidate events
     raw_events = fetch_query("""
         SELECT e.*, u.name as host_name, u.trust_score as host_trust_score
