@@ -2706,6 +2706,16 @@ async function loadChatRooms() {
 // ══════════════════════════════════════════════════════════════
   // GROUP SKILL EVENTS LOGIC (Part A)
   // ══════════════════════════════════════════════════════════════
+  function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   let userWalletBalance = 0;
   let cachedMyEvents = null;
   let activeEventDetail = null;
