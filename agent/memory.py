@@ -320,6 +320,45 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_event_parts_event ON EventParticipants(event_id, status);")
     c.execute("CREATE INDEX IF NOT EXISTS idx_event_parts_user ON EventParticipants(user_id);")
 
+    # Guarded ALTER TABLE for reminder_sent on EventParticipants
+    try:
+        c.execute("ALTER TABLE EventParticipants ADD COLUMN reminder_sent BOOLEAN DEFAULT 0")
+    except:
+        pass  # Column already exists
+
+    # Group Skill Event Messages
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS EventMessages (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL,
+            sender_id TEXT NOT NULL,
+            content TEXT NOT NULL,
+            is_flagged BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (event_id) REFERENCES Events(id),
+            FOREIGN KEY (sender_id) REFERENCES Users(id)
+        );
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_event_msgs_event ON EventMessages(event_id, created_at);")
+
+    # Group Skill Event Ratings
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS EventRatings (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL,
+            reviewer_id TEXT NOT NULL,
+            reviewee_id TEXT NOT NULL,
+            rating INTEGER NOT NULL,
+            review_text TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (event_id) REFERENCES Events(id),
+            FOREIGN KEY (reviewer_id) REFERENCES Users(id),
+            FOREIGN KEY (reviewee_id) REFERENCES Users(id),
+            UNIQUE (event_id, reviewer_id)
+        );
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_event_ratings_reviewee ON EventRatings(reviewee_id);")
+
 
     # --- Message deletion columns (WhatsApp-style) ---
     for table in ["Messages", "VoiceMessages", "YoutubeLinks"]:
