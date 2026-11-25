@@ -54,6 +54,27 @@ INITIAL_BADGES = [
         "criteria_type": "streak",
         "criteria_value": json.dumps({"weeks": 5}),
     },
+    {
+        "code": "first_event_attended",
+        "name": "First Event Attended",
+        "description": "Attended your first group skill event!",
+        "criteria_type": "event_attendance",
+        "criteria_value": json.dumps({"count": 1}),
+    },
+    {
+        "code": "community_host",
+        "name": "Community Host",
+        "description": "Hosted 3 completed group skill events for the community!",
+        "criteria_type": "event_hosted",
+        "criteria_value": json.dumps({"count": 3}),
+    },
+    {
+        "code": "crowd_favourite",
+        "name": "Crowd Favourite",
+        "description": "Hosted 3+ events with an outstanding average rating of 4.5+!",
+        "criteria_type": "event_rating_threshold",
+        "criteria_value": json.dumps({"min_avg": 4.5, "min_events": 3}),
+    },
 ]
 
 
@@ -277,3 +298,50 @@ def check_and_award_badges(user_id: str):
 
     # Check dynamic skill mentor badges
     _seed_skill_mentor_badges(user_id)
+
+
+def _award_badge_by_code(user_id: str, badge_code: str):
+    """Helper to award a badge by its unique code with duplicate guard."""
+    badge_rows = fetch_query("SELECT id FROM Badges WHERE code = ?", (badge_code,))
+    if not badge_rows:
+        seed_badges()
+        badge_rows = fetch_query("SELECT id FROM Badges WHERE code = ?", (badge_code,))
+    if badge_rows:
+        badge_id = badge_rows[0]["id"]
+        try:
+            run_query(
+                "INSERT INTO UserBadges (id, user_id, badge_id, awarded_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                (str(uuid.uuid4()), user_id, badge_id),
+            )
+        except Exception:
+            pass  # Unique constraint guard — badge already awarded
+
+
+def award_event_badges(user_id: str):
+    """Check and award event badges for a user (as attendee or host)."""
+    # 1. First Event Attended
+    attended_rows = fetch_query(
+        "SELECT COUNT(*) as cnt FROM EventParticipants WHERE user_id = ? AND status = 'attended'",
+        (user_id,)
+    )
+    if attended_rows and attended_rows[0]["cnt"] >= 1:
+        _award_badge_by_code(user_id, "first_event_attended")
+
+    # 2. Community Host (hosted 3 completed events)
+    hosted_rows = fetch_query(
+        "SELECT COUNT(*) as cnt FROM Events WHERE host_id = ? AND status = 'completed'",
+        (user_id,)
+    )
+    hosted_completed = hosted_rows[0]["cnt"] if hosted_rows else 0
+    if hosted_completed >= 3:
+        _award_badge_by_code(user_id, "community_host")
+
+    # 3. Crowd Favourite (host average event rating >= 4.5 across 3+ events)
+    event_ratings = fetch_query(
+        "SELECT rating FROM EventRatings WHERE reviewee_id = ?",
+        (user_id,)
+    )
+    if hosted_completed >= 3 and event_ratings:
+        avg_rating = sum(r["rating"] for r in event_ratings) / len(event_ratings)
+        if avg_rating >= 4.5:
+            _award_badge_by_code(user_id, "crowd_favourite")

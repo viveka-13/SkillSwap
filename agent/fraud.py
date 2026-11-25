@@ -301,3 +301,32 @@ def detect_credit_cycling(user_id: str):
             "Credit cycling flag created for users %s and %s: %d exchanges, net ratio %.0f%%",
             user_id, counterpart_id, len(exchanges), net_ratio * 100
         )
+
+
+def record_host_abandonment(host_id: str, event_id: str):
+    """
+    Record a fraud audit flag when an event is auto-abandoned because the host
+    did not confirm completion within 48 hours. Flag 'watch' only, never auto-restrict.
+    """
+    detail = f"Host abandoned event {event_id} without confirming completion (>48 hours past start time)."
+    create_fraud_flag(host_id, "host_abandonment", detail, "watch")
+
+
+def record_host_cancellation(host_id: str, event_id: str):
+    """
+    Record a fraud audit flag if a host repeatedly cancels events after attendees have already joined.
+    Flag 'watch' only, never auto-restrict.
+    """
+    try:
+        cancelled_rows = fetch_query("""
+            SELECT COUNT(DISTINCT e.id) as cnt
+            FROM Events e
+            JOIN EventParticipants p ON e.id = p.event_id
+            WHERE e.host_id = ? AND e.status = 'cancelled'
+        """, (host_id,))
+        cnt = cancelled_rows[0]["cnt"] if cancelled_rows else 0
+        if cnt >= 2:
+            detail = f"Host repeatedly cancelled events ({cnt} times) after attendees had already reserved spots."
+            create_fraud_flag(host_id, "repeated_cancellation", detail, "watch")
+    except Exception as e:
+        logger.warning("Error checking repeated cancellations for host %s: %s", host_id, e)
